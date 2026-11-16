@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+	<key>CFBundleExecutable</key>
+	<string>MonoHub</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
+	<key>CFBundleIdentifier</key>
+	<string>com.antigravity.monohub</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>MonoHub</string>
+	<key>CFBundleDisplayName</key>
+	<string>MonoHub</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>0.17.2</string>
+	<key>CFBundleVersion</key>
+	<string>58</string>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.utilities</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>27.0</string>
+	<key>LSArchitecturePriority</key>
+	<array>
+		<string>arm64</string>
+	</array>
+	<key>LSRequiresNativeExecution</key>
+	<true/>
+	<key>LSUIElement</key>
+	<false/>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
+	<key>NSHumanReadableCopyright</key>
+	<string>Copyright © 2026 Antigravity. All rights reserved.</string>
+	<key>NSPrincipalClass</key>
+	<string>NSApplication</string>
+	<key>NSFullDiskAccessUsageDescription</key>
+	<string>O MonoHub requer Acesso Total ao Disco para localizar e remover com segurança resíduos órfãos em ~/Library/Containers e limpar caches protegidos do sistema.</string>
+	<key>NSSystemAdministrationUsageDescription</key>
+	<string>O MonoHub requer permissões para escanear e remover com segurança resíduos e caches do sistema.</string>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>O MonoHub consulta aplicativos de mídia (Apple Music, Spotify), Calendário e Finder com precisão e segurança.</string>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>O MonoHub lê o nível de bateria de dispositivos Bluetooth conectados localmente.</string>
+	<key>NSAccessibilityUsageDescription</key>
+	<string>O MonoHub requer acesso de Acessibilidade para mover, redimensionar, organizar e alternar janelas automaticamente na sua tela.</string>
+	<key>NSScreenCaptureUsageDescription</key>
+	<string>O MonoHub requer permissão de Gravação de Tela para capturar a tela, exibir a lupa de pixel, reconhecer texto e mostrar miniaturas das janelas abertas no alternador.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>O MonoHub utiliza a câmera para exibir um espelho rápido diretamente no notch.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>O MonoHub requer acesso ao microfone para monitorar o nível de voz no notch e permitir o silenciamento global rápido.</string>
+	<key>NSCalendarsUsageDescription</key>
+	<string>O MonoHub acessa seu calendário para exibir compromissos futuros e links de reuniões no notch.</string>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>O MonoHub acessa seu calendário para exibir compromissos futuros e links de reuniões diretamente no notch.</string>
+	<key>NSRemindersUsageDescription</key>
+	<string>O MonoHub acessa os lembretes para visualizar e concluir tarefas pelo notch.</string>
+	<key>NSRemindersFullAccessUsageDescription</key>
+	<string>O MonoHub acessa os lembretes para visualizar, criar e concluir tarefas diretamente pelo notch.</string>
+	<key>CFBundleDocumentTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>Image</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>LSHandlerRank</key>
+			<string>Alternate</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>public.image</string>
+			</array>
+		</dict>
+	</array>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.antigravity.monohub</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>monohub</string>
+				<string>monotile</string>
+				<string>monotab</string>
+				<string>mononotch</string>
+				<string>monoaibar</string>
+				<string>monoshot</string>
+				<string>monoroute</string>
+				<string>monosnippet</string>
+				<string>monobluetooth</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>Web Browser URL</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>http</string>
+				<string>https</string>
+			</array>
+		</dict>
+	</array>
+</dict>
+</plist>
