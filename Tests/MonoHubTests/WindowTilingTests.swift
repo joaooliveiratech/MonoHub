@@ -618,4 +618,75 @@ struct TilingLifecycleTests {
         #expect(step3Rect.minX == 0)
         #expect(step3Rect.width == 960)
     }
+
+    @Test("Window at screen edge but not in target format adjusts on current monitor before traversing")
+    func adjustsToFormatBeforeCrossMonitorTraversal() {
+        let leftScreen = ScreenLayout(
+            bounds: CGRect(x: 0, y: 0, width: 1920, height: 1080),
+            visibleBounds: CGRect(x: 0, y: 0, width: 1920, height: 1055)
+        )
+        let rightScreen = ScreenLayout(
+            bounds: CGRect(x: 1920, y: 0, width: 1920, height: 1080),
+            visibleBounds: CGRect(x: 1920, y: 0, width: 1920, height: 1055)
+        )
+        let layouts = [leftScreen, rightScreen]
+        let options = TileOptions(margin: 0, gap: 0)
+
+        // Window on the left edge of rightScreen, but shorter and narrower than leftHalf
+        let nonStandardLeft = CGRect(x: 1920, y: 120, width: 650, height: 600)
+        #expect(TileCalculation.traversalTarget(
+            for: .leftHalf,
+            frame: nonStandardLeft,
+            screen: rightScreen,
+            layouts: layouts,
+            options: options,
+            wasJustApplied: false
+        ) == nil)
+
+        // Window in topLeftQuarter on rightScreen when leftHalf is triggered -> should snap to leftHalf first
+        let quarterLeft = TileCalculation.calculate(action: .topLeftQuarter, screen: rightScreen, currentFrame: nonStandardLeft, options: options)
+        #expect(TileCalculation.traversalTarget(
+            for: .leftHalf,
+            frame: quarterLeft,
+            screen: rightScreen,
+            layouts: layouts,
+            options: options,
+            wasJustApplied: false
+        ) == nil)
+
+        // Window in firstThird on rightScreen when leftHalf is triggered -> should snap to leftHalf first
+        let firstThird = TileCalculation.calculate(action: .firstThird, screen: rightScreen, currentFrame: nonStandardLeft, options: options)
+        #expect(TileCalculation.traversalTarget(
+            for: .leftHalf,
+            frame: firstThird,
+            screen: rightScreen,
+            layouts: layouts,
+            options: options,
+            wasJustApplied: false
+        ) == nil)
+
+        // Window on right edge of leftScreen with non-standard height -> should snap to rightHalf first
+        let nonStandardRight = CGRect(x: 1920 - 700, y: 80, width: 700, height: 500)
+        #expect(TileCalculation.traversalTarget(
+            for: .rightHalf,
+            frame: nonStandardRight,
+            screen: leftScreen,
+            layouts: layouts,
+            options: options,
+            wasJustApplied: false
+        ) == nil)
+
+        // Once snapped to full leftHalf, triggering leftHalf traverses to leftScreen's rightHalf
+        let fullLeftHalf = TileCalculation.calculate(action: .leftHalf, screen: rightScreen, currentFrame: nonStandardLeft, options: options)
+        let traversed = TileCalculation.traversalTarget(
+            for: .leftHalf,
+            frame: fullLeftHalf,
+            screen: rightScreen,
+            layouts: layouts,
+            options: options,
+            wasJustApplied: false
+        )
+        #expect(traversed?.1 == leftScreen)
+        #expect(traversed?.0 == TileCalculation.calculate(action: .rightHalf, screen: leftScreen, currentFrame: fullLeftHalf, options: options))
+    }
 }

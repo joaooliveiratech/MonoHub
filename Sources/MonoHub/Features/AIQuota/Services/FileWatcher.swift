@@ -11,9 +11,14 @@ actor FileWatcher {
 
     private init() {}
 
-    func start(onFileChange: @escaping @Sendable (ProviderType) -> Void) {
+    func start(onFileChange: @escaping @Sendable (ProviderType) -> Void) async {
         self.onFileChange = onFileChange
         stop()
+
+        let enabled = await MainActor.run {
+            Set(QuotaPreferencesManager.shared.enabledProviders)
+        }
+        guard !enabled.isEmpty else { return }
 
         let home = FileManager.default.homeDirectoryForCurrentUser
         let claudeProjects = home.appending(path: ".claude/projects")
@@ -29,11 +34,13 @@ actor FileWatcher {
             (.kimi, home.appending(path: ".kimi/credentials"))
         ]
 
-        for (provider, folderURL) in targets {
+        for (provider, folderURL) in targets where enabled.contains(provider) {
             watch(directory: folderURL, provider: provider, isProjectRoot: folderURL == claudeProjects)
         }
 
-        watchRecentClaudeProjectDirs(in: claudeProjects)
+        if enabled.contains(.claude) {
+            watchRecentClaudeProjectDirs(in: claudeProjects)
+        }
     }
 
     func stop() {
@@ -101,7 +108,7 @@ actor FileWatcher {
     }
 
     private var lastTriggerTime: [ProviderType: Date] = [:]
-    private let minimumReactiveInterval: TimeInterval = 15.0
+    private let minimumReactiveInterval: TimeInterval = 60.0
 
     private func handleTrigger(for provider: ProviderType) {
         let now = Date()

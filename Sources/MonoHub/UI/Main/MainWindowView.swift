@@ -34,8 +34,8 @@ struct MainWindowView: View {
         let engine = SystemMonitorEngine.shared
         let monitorEnabled = features.isEnabled(.systemMonitor)
         engine.setDashboardMonitoring(active: monitorEnabled && item == .dashboard)
-        let isMonitoringItem = item == .monitor || item == .battery || item == .ports
-        let focused: ModuleType? = (item == .battery) ? .battery : ((item == .ports) ? .network : nil)
+        let isMonitoringItem = item == .monitor || item == .battery
+        let focused: ModuleType? = (item == .battery) ? .battery : nil
         engine.setWindowMonitoring(active: monitorEnabled && isMonitoringItem, focusedModule: focused)
     }
 

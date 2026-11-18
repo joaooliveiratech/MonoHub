@@ -143,12 +143,12 @@ final class ClipboardManager {
 
     private func startTimer() {
         guard isRunning, monitorTimer == nil else { return }
-        let timer = Timer(timeInterval: 0.5, repeats: true) { _ in
+        let timer = Timer(timeInterval: 1.2, repeats: true) { _ in
             MainActor.assumeIsolated {
                 ClipboardManager.shared.pollPasteboard()
             }
         }
-        timer.tolerance = 0.25
+        timer.tolerance = 0.4
         RunLoop.main.add(timer, forMode: .common)
         monitorTimer = timer
     }

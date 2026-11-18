@@ -1,32 +1,6 @@
 import SwiftUI
 import AppKit
 
-private struct AdaptiveIdleTimelineSchedule: TimelineSchedule {
-    let isPaused: Bool
-    let mode: NotchIdleInteractionMode
-
-    func entries(from startDate: Date, mode timelineMode: TimelineScheduleMode) -> AnyIterator<Date> {
-        var current = startDate
-        return AnyIterator {
-            guard !isPaused else { return nil }
-            let interval: TimeInterval
-            if timelineMode == .lowFrequency {
-                interval = 0.75
-            } else if mode == .alwaysActive || IdleInteractionMonitor.shared.isInteracting {
-                interval = 1.0 / 20.0
-            } else if mode == .onlyWhenTyping {
-
-                interval = 2.0
-            } else {
-
-                interval = 0.4
-            }
-            current = current.addingTimeInterval(interval)
-            return current
-        }
-    }
-}
-
 struct NotchIdleAnimationView: View {
     let style: NotchIdleAnimation
     let speedMultiplier: Double
@@ -88,69 +62,90 @@ struct NotchIdleAnimationView: View {
     private static let elvishRunes: [String] = ["◈", "⌇", "⟡", "⟠", "❖", "✧"]
 
     var body: some View {
-        let shouldPause = style == .none || NotchWindowController.shared.isDisplayAsleep || AppExclusionManager.shared.isSuppressed
-        TimelineView(AdaptiveIdleTimelineSchedule(isPaused: shouldPause, mode: interactionMode)) { context in
-            let snapshot = IdleInteractionMonitor.shared.snapshot(
-                at: context.date,
-                mode: interactionMode,
-                speedMultiplier: speedMultiplier
-            )
-            let t = snapshot.phase
-            let activeStyle = style.resolved(at: context.date)
+        let controller = NotchWindowController.shared
+        let monitor = IdleInteractionMonitor.shared
+        let isInteracting = monitor.isInteracting
+        let shouldPause = style == .none
+            || controller.isDisplayAsleep
+            || AppExclusionManager.shared.isSuppressed
+            || controller.isExpanded
+            || (interactionMode != .alwaysActive && !isInteracting)
+        let renderDate = shouldPause ? Date() : monitor.tickDate
 
-            GeometryReader { geo in
-                let size = geo.size
-                Group {
-                    if compactSingleWing {
-                        compactWingCanvas(style: activeStyle, t: t, snapshot: snapshot, size: size)
-                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
-                            .clipped()
-                    } else if hasHardwareNotch && physicalNotchWidth > 0 {
-                        let wingW = max(24, (size.width - physicalNotchWidth) / 2)
-                        HStack(spacing: 0) {
-                            wingContainer(width: wingW, height: size.height, alignment: .center) {
-                                leftWingCanvas(
-                                    style: activeStyle,
-                                    t: t,
-                                    snapshot: snapshot,
-                                    size: CGSize(width: wingW, height: size.height)
-                                )
-                            }
-
-                            Color.clear
-                                .frame(width: physicalNotchWidth, height: size.height)
-
-                            wingContainer(width: wingW, height: size.height, alignment: .center) {
-                                rightWingCanvas(
-                                    style: activeStyle,
-                                    t: t,
-                                    snapshot: snapshot,
-                                    size: CGSize(width: wingW, height: size.height)
-                                )
-                            }
-                        }
-                    } else {
-                        fullWidthCanvas(
-                            style: activeStyle,
-                            t: t,
-                            snapshot: snapshot,
-                            size: CGSize(width: max(40, size.width - 20), height: size.height)
-                        )
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .padding(.horizontal, 10)
-                    }
-                }
-                .opacity(snapshot.isVisible ? 1.0 : 0.0)
-            }
+        GeometryReader { geo in
+            renderedContent(at: renderDate, size: geo.size)
         }
         .onAppear {
             guard NotchFeature.isRunning else { return }
-            IdleInteractionMonitor.shared.ensureStarted()
+            monitor.ensureStarted()
+            monitor.registerActiveView()
+        }
+        .onDisappear {
+            monitor.unregisterActiveView()
         }
         .onChange(of: style) { _, newStyle in
-            guard NotchFeature.isRunning, newStyle != .none else { return }
-            IdleInteractionMonitor.shared.ensureStarted()
+            guard NotchFeature.isRunning else { return }
+            if newStyle != .none {
+                monitor.ensureStarted()
+            }
+            monitor.syncRenderTimer()
         }
+        .onChange(of: interactionMode) { _, _ in
+            monitor.syncRenderTimer()
+        }
+    }
+
+    @ViewBuilder
+    private func renderedContent(at date: Date, size: CGSize) -> some View {
+        let snapshot = IdleInteractionMonitor.shared.snapshot(
+            at: date,
+            mode: interactionMode,
+            speedMultiplier: speedMultiplier
+        )
+        let t = snapshot.phase
+        let activeStyle = style.resolved(at: date)
+
+        Group {
+            if compactSingleWing {
+                compactWingCanvas(style: activeStyle, t: t, snapshot: snapshot, size: size)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+                    .clipped()
+            } else if hasHardwareNotch && physicalNotchWidth > 0 {
+                let wingW = max(24, (size.width - physicalNotchWidth) / 2)
+                HStack(spacing: 0) {
+                    wingContainer(width: wingW, height: size.height, alignment: .center) {
+                        leftWingCanvas(
+                            style: activeStyle,
+                            t: t,
+                            snapshot: snapshot,
+                            size: CGSize(width: wingW, height: size.height)
+                        )
+                    }
+
+                    Color.clear
+                        .frame(width: physicalNotchWidth, height: size.height)
+
+                    wingContainer(width: wingW, height: size.height, alignment: .center) {
+                        rightWingCanvas(
+                            style: activeStyle,
+                            t: t,
+                            snapshot: snapshot,
+                            size: CGSize(width: wingW, height: size.height)
+                        )
+                    }
+                }
+            } else {
+                fullWidthCanvas(
+                    style: activeStyle,
+                    t: t,
+                    snapshot: snapshot,
+                    size: CGSize(width: max(40, size.width - 20), height: size.height)
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding(.horizontal, 10)
+            }
+        }
+        .opacity(snapshot.isVisible ? 1.0 : 0.0)
     }
 
     private func wingContainer<Content: View>(

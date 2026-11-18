@@ -82,12 +82,12 @@ final class AIQuotaStatusItemController: NSObject {
         let image = AIQuotaMenuBarRenderer.image(mode: prefs.displayMode, columns: columns)
         if button.image !== image {
             button.image = image
+            button.setAccessibilityValue(image.accessibilityDescription)
         }
         let length = image.size.width + MenuBarRenderer.itemPadding * 2
-        if statusItem?.length != length {
+        if abs((statusItem?.length ?? 0) - length) > 0.01 {
             statusItem?.length = length
         }
-        button.setAccessibilityValue(image.accessibilityDescription)
     }
 
     private func observePreferences() {

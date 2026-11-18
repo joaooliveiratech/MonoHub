@@ -177,9 +177,18 @@ final class SnippetManager {
         guard eventTap == nil else { return }
 
         let mask = (1 << CGEventType.keyDown.rawValue)
-        let tap = BackgroundEventTap(mask: CGEventMask(mask), callback: snippetEventTapCallback, userInfo: Unmanaged.passUnretained(self).toOpaque())
+        let tap = BackgroundEventTap(
+            mask: CGEventMask(mask),
+            options: .listenOnly,
+            callback: snippetEventTapCallback,
+            userInfo: Unmanaged.passUnretained(self).toOpaque()
+        )
         tap?.start(name: "com.antigravity.monohub.snippets.tap")
         self.eventTap = tap
+    }
+
+    func reenableTap() {
+        eventTap?.reenable()
     }
 
     private func stopEventTap() {
@@ -266,6 +275,14 @@ nonisolated private func snippetEventTapCallback(
     event: CGEvent,
     userInfo: UnsafeMutableRawPointer?
 ) -> Unmanaged<CGEvent>? {
+    if type == .tapDisabledByTimeout, let userInfo {
+        let manager = Unmanaged<SnippetManager>.fromOpaque(userInfo).takeUnretainedValue()
+        Task { @MainActor in
+            manager.reenableTap()
+        }
+        return Unmanaged.passUnretained(event)
+    }
+
     guard type == .keyDown, let userInfo else {
         return Unmanaged.passUnretained(event)
     }

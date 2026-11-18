@@ -385,7 +385,6 @@ struct LiveActivityCompactLeading: View {
                 Image(systemName: info.isCharging ? "bolt.fill" : NotchBatteryGlyph.name(for: info))
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(NotchBatteryGlyph.tint(for: info))
-                    .symbolEffect(.pulse, isActive: info.isCharging)
                 if showsLabel {
                     label(info.isCharging ? localized("Charging") : localized("Low battery"))
                 }
@@ -400,7 +399,6 @@ struct LiveActivityCompactLeading: View {
                 Image(systemName: isThermal ? "flame.fill" : "cpu.fill")
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(isThermal ? .red : .orange)
-                    .symbolEffect(.pulse, options: .repeat(.continuous))
                 if showsLabel {
                     let name = isThermal ? localized("Thermal Alert") : (SystemMonitorEngine.shared.cpuData.topProcesses.first?.name ?? "CPU")
                     label(name)
@@ -446,7 +444,6 @@ struct LiveActivityCompactTrailing: View {
                 Image(systemName: "circle.fill")
                     .font(.system(size: 6))
                     .foregroundStyle(badgeColor)
-                    .symbolEffect(.pulse, options: .repeat(.continuous))
                 TimelineView(.everyMinute) { _ in
                     Text(activeEvent?.shortIslandCountdown ?? "Agora")
                         .font(.system(size: 11, weight: .semibold, design: .rounded))
@@ -594,7 +591,7 @@ struct NotchPeekRow: View {
                 Image(systemName: "flame.fill")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(.red)
-                    .symbolEffect(.pulse, options: .repeat(.continuous))
+                    .symbolEffect(.pulse, options: .repeat(2))
                 VStack(alignment: .leading, spacing: 0) {
                     Text("\(localized("Thermal Alert")): \(state)")
                         .font(.system(size: 12, weight: .semibold, design: .rounded))

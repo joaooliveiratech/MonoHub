@@ -33,7 +33,7 @@ final class SnapManager {
     private init() {}
 
     func reload() {
-        let isNeeded = TilePreferencesManager.shared.isMouseTrackingNeeded
+        let isNeeded = TilePreferencesManager.shared.isMouseTrackingNeeded && AXIsProcessTrusted()
         guard isNeeded != (pressMonitor != nil) else { return }
         stop()
         guard isNeeded else { return }
@@ -95,6 +95,7 @@ final class SnapManager {
             state = .pressed(origin: point)
 
         case .pressed(let origin):
+            guard point.distance(to: origin) >= moveConfirmationDistance else { return }
             guard let window = windows.window(at: origin),
                   windows.isManageable(window),
                   let frame = windows.frame(of: window) else {

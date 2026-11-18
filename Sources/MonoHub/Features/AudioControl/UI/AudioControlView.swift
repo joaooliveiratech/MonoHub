@@ -5,6 +5,7 @@ import CoreAudio
 
 struct AudioControlView: View {
     @Bindable private var audioManager = AudioDeviceManager.shared
+    private let notchPrefs = NotchPreferences.shared
     private let volumeManager = AudioVolumeManager.shared
     private let processMixer = AudioProcessVolumeManager.shared
 
@@ -846,27 +847,41 @@ struct AudioControlView: View {
                         .font(.system(size: 11.5, weight: .semibold, design: .rounded).monospacedDigit())
                         .frame(width: 42, alignment: .trailing)
 
-                    HStack(spacing: 4) {
-                        Text(localized("Signal:"))
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                        GeometryReader { geo in
-                            ZStack(alignment: .leading) {
-                                Capsule()
-                                    .fill(Color.secondary.opacity(0.18))
-                                Capsule()
-                                    .fill(
-                                        LinearGradient(
-                                            colors: [.green, .yellow, .orange],
-                                            startPoint: .leading,
-                                            endPoint: .trailing
-                                        )
-                                    )
-                                    .frame(width: max(3, geo.size.width * CGFloat(min(1.0, max(0.0, audioManager.micLevel)))))
-                                    .animation(.linear(duration: 0.08), value: audioManager.micLevel)
+                    HStack(spacing: 6) {
+                        Button {
+                            notchPrefs.musicEnableMicLevelMeter.toggle()
+                            audioManager.syncMeteringState()
+                        } label: {
+                            HStack(spacing: 4) {
+                                Image(systemName: notchPrefs.musicEnableMicLevelMeter ? "waveform.circle.fill" : "waveform.circle")
+                                    .font(.system(size: 11))
+                                Text(localized("Signal:"))
+                                    .font(.caption2)
                             }
+                            .foregroundStyle(notchPrefs.musicEnableMicLevelMeter ? Color.green : Color.secondary)
                         }
-                        .frame(width: 80, height: 7)
+                        .buttonStyle(.plain)
+                        .help(localized("Live microphone level meter (VU meter)"))
+
+                        if notchPrefs.musicEnableMicLevelMeter {
+                            GeometryReader { geo in
+                                ZStack(alignment: .leading) {
+                                    Capsule()
+                                        .fill(Color.secondary.opacity(0.18))
+                                    Capsule()
+                                        .fill(
+                                            LinearGradient(
+                                                colors: [.green, .yellow, .orange],
+                                                startPoint: .leading,
+                                                endPoint: .trailing
+                                            )
+                                        )
+                                        .frame(width: max(3, geo.size.width * CGFloat(min(1.0, max(0.0, audioManager.micLevel)))))
+                                        .animation(.linear(duration: 0.08), value: audioManager.micLevel)
+                                }
+                            }
+                            .frame(width: 80, height: 7)
+                        }
                     }
                 }
 

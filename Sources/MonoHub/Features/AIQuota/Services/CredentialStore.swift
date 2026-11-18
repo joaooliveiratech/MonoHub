@@ -41,6 +41,7 @@ actor CredentialStore {
 
     private var cachedClaude: ClaudeCredential?
     private var cachedClaudeAt: Date?
+    private var lastCLISecurityCheckAt: Date?
     private var didMigrateLegacyStorage = false
 
     private init() {}
@@ -67,14 +68,6 @@ actor CredentialStore {
 
         var candidates: [ClaudeCredential] = []
 
-        if let cliCred = await claudeCredentialFromCLI() {
-            if !cliCred.isExpired {
-                remember(cliCred)
-                return .found(cliCred)
-            }
-            candidates.append(cliCred)
-        }
-
         let fileCreds = claudeCredentialsFromFiles()
         if let validFileCred = fileCreds.first(where: { !$0.isExpired }) {
             remember(validFileCred)
@@ -90,6 +83,19 @@ actor CredentialStore {
                 return .found(credential)
             }
             candidates.append(credential)
+        }
+
+        let shouldQueryCLI = forceReload
+            || lastCLISecurityCheckAt.map { Date().timeIntervalSince($0) >= 300.0 } ?? true
+        if shouldQueryCLI {
+            lastCLISecurityCheckAt = Date()
+            if let cliCred = await claudeCredentialFromCLI() {
+                if !cliCred.isExpired {
+                    remember(cliCred)
+                    return .found(cliCred)
+                }
+                candidates.append(cliCred)
+            }
         }
 
         let expiredWithRefresh = candidates

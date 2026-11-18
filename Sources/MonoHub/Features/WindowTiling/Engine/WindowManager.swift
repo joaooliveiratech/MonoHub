@@ -264,8 +264,8 @@ final class WindowManager {
         default:
             let wasJustApplied = lastAction == action
                 && lastActionWindow == window
-                && (lastActionScreen == currentScreen
-                    || restorePoints[window]?.applied.isApproximatelyEqual(to: currentFrame, tolerance: 36) == true)
+                && lastActionScreen == currentScreen
+                && restorePoints[window]?.applied.isApproximatelyEqual(to: currentFrame, tolerance: 36) == true
 
             if (prefs.moveToAdjacentDisplayOnEdge || prefs.repeatBehavior == .moveAcrossDisplays),
                let (target, targetScreen) = TileCalculation.traversalTarget(

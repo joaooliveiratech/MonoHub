@@ -10,7 +10,7 @@ struct MonoCleanCoreTests {
     @Test("AppInfo satisfies SemVer and zero telemetry contract")
     func appInfoVerification() {
         #expect(AppInfo.name == "MonoHub")
-        #expect(AppInfo.version == "0.17.2")
+        #expect(AppInfo.version == "0.17.4")
         #expect(!AppInfo.privacyStatement.isEmpty)
         #expect(AppInfo.privacyStatement.contains("Zero telemetria"))
     }

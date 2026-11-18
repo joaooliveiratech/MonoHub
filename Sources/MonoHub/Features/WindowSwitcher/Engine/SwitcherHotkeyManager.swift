@@ -164,12 +164,12 @@ nonisolated final class SwitcherHotkeyManager: Sendable {
     private func startModifierPolling() {
         startFallbackFlagsMonitors()
         guard modifierPollTimer == nil else { return }
-        let timer = Timer(timeInterval: 0.03, repeats: true) { [weak self] _ in
+        let timer = Timer(timeInterval: 0.15, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated {
                 self?.pollModifierState()
             }
         }
-        timer.tolerance = 0.01
+        timer.tolerance = 0.04
         RunLoop.main.add(timer, forMode: .common)
         modifierPollTimer = timer
     }

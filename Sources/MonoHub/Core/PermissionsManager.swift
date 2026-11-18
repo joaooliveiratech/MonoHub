@@ -55,12 +55,7 @@ final class PermissionsManager {
         }
     }
 
-    func refreshStatus() {
-        let fda = Self.checkSystemFullDiskAccess()
-        if fda != hasFullDiskAccess {
-            hasFullDiskAccess = fda
-        }
-
+    func refreshAccessibilityAndScreenRecording() {
         let ax = AXIsProcessTrusted()
         if ax != hasAccessibility {
             hasAccessibility = ax
@@ -70,6 +65,16 @@ final class PermissionsManager {
         if scr != hasScreenRecording {
             hasScreenRecording = scr
         }
+    }
+
+    func refreshStatus() {
+        if !hasFullDiskAccess {
+            let fda = Self.checkSystemFullDiskAccess()
+            if fda != hasFullDiskAccess {
+                hasFullDiskAccess = fda
+            }
+        }
+        refreshAccessibilityAndScreenRecording()
     }
 
     @discardableResult

@@ -9,9 +9,9 @@ import SwiftUI
 struct ModelTests {
     @Test("AppInfo version and build metadata are valid")
     func appInfoMetadata() {
-        #expect(AppInfo.version == "0.17.2")
-        #expect(AppInfo.build == "58")
-        #expect(AppInfo.fullVersionString == "0.17.2 (58)")
+        #expect(AppInfo.version == "0.17.4")
+        #expect(AppInfo.build == "60")
+        #expect(AppInfo.fullVersionString == "0.17.4 (60)")
         #expect(AppInfo.bundleIdentifier == "com.antigravity.monohub")
     }
 
@@ -584,7 +584,7 @@ struct LiveActivityTests {
         #expect(requestWithNotch.processRankings.contains(.cpu))
         #expect(requestWithNotch.menuBarModules.contains(.cpu))
         #expect(requestWithNotch.menuBarModules.contains(.sensors))
-        #expect(requestWithNotch.windowAudience == true)
+        #expect(requestWithNotch.windowAudience == false)
     }
 }
 

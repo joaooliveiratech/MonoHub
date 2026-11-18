@@ -67,7 +67,6 @@ nonisolated final class ActiveProcessAudioTap: @unchecked Sendable {
     private(set) var aggregateDeviceID: AudioObjectID = AudioObjectID(kAudioObjectUnknown)
     private(set) var currentOutputDeviceUID: String?
     private var ioProcID: AudioDeviceIOProcID?
-    private let ioQueue = DispatchQueue(label: "com.monohub.audiotap.io", qos: .userInteractive)
 
     init(appKey: String, processObjectIDs: [AudioObjectID]) {
         self.appKey = appKey
@@ -126,7 +125,7 @@ nonisolated final class ActiveProcessAudioTap: @unchecked Sendable {
             return false
         }
 
-        let desc = CATapDescription(stereoMixdownOfProcesses: processObjectIDs)
+        let desc = CATapDescription(processes: processObjectIDs, deviceUID: outUID, stream: 0)
         let tapUUID = UUID()
         desc.uuid = tapUUID
         desc.name = "MonoHub Volume Tap (\(appKey))"
@@ -149,7 +148,11 @@ nonisolated final class ActiveProcessAudioTap: @unchecked Sendable {
             kAudioAggregateDeviceIsStackedKey as String: false,
             kAudioAggregateDeviceTapAutoStartKey as String: true,
             kAudioAggregateDeviceSubDeviceListKey as String: [
-                [kAudioSubDeviceUIDKey as String: outUID]
+                [
+                    kAudioSubDeviceUIDKey as String: outUID,
+                    kAudioSubDeviceInputChannelsKey as String: 0,
+                    kAudioSubDeviceDriftCompensationKey as String: false
+                ]
             ],
             kAudioAggregateDeviceTapListKey as String: [
                 [
@@ -173,15 +176,106 @@ nonisolated final class ActiveProcessAudioTap: @unchecked Sendable {
         let ioStatus = AudioDeviceCreateIOProcIDWithBlock(
             &newIOProcID,
             newAggID,
-            ioQueue
+            nil
         ) { _, inInputData, _, outOutputData, _ in
             let gain = state.currentEffectiveGain()
             let inBuffers = UnsafeMutableAudioBufferListPointer(UnsafeMutablePointer(mutating: inInputData))
             let outBuffers = UnsafeMutableAudioBufferListPointer(outOutputData)
-            let count = min(inBuffers.count, outBuffers.count)
+            let outCount = outBuffers.count
+            guard outCount > 0 else { return }
+
+            let lastInChannels = inBuffers.last?.mNumberChannels ?? 0
+            let outFirstChannels = outBuffers[0].mNumberChannels
+
+            if let tapBuf = inBuffers.last,
+               lastInChannels == 2,
+               outCount >= 2,
+               outFirstChannels == 1 {
+                var outL = outBuffers[0]
+                var outR = outBuffers[1]
+                let inFrames = Int(tapBuf.mDataByteSize) / (2 * MemoryLayout<Float32>.size)
+                let outLFrames = Int(outL.mDataByteSize) / MemoryLayout<Float32>.size
+                let outRFrames = Int(outR.mDataByteSize) / MemoryLayout<Float32>.size
+                let frameCount = min(inFrames, min(outLFrames, outRFrames))
+                let outByteCount = frameCount * MemoryLayout<Float32>.size
+
+                if frameCount > 0,
+                   let inPtr = tapBuf.mData?.assumingMemoryBound(to: Float32.self),
+                   let outLPtr = outL.mData?.assumingMemoryBound(to: Float32.self),
+                   let outRPtr = outR.mData?.assumingMemoryBound(to: Float32.self) {
+                    if gain <= 0.0001 {
+                        memset(outLPtr, 0, outByteCount)
+                        memset(outRPtr, 0, outByteCount)
+                    } else {
+                        var scalar = gain
+                        var low: Float = -1.0
+                        var high: Float = 1.0
+                        vDSP_vsmul(inPtr, 2, &scalar, outLPtr, 1, vDSP_Length(frameCount))
+                        vDSP_vsmul(inPtr.advanced(by: 1), 2, &scalar, outRPtr, 1, vDSP_Length(frameCount))
+                        vDSP_vclip(outLPtr, 1, &low, &high, outLPtr, 1, vDSP_Length(frameCount))
+                        vDSP_vclip(outRPtr, 1, &low, &high, outRPtr, 1, vDSP_Length(frameCount))
+                    }
+                    outL.mDataByteSize = UInt32(outByteCount)
+                    outR.mDataByteSize = UInt32(outByteCount)
+                    outBuffers[0] = outL
+                    outBuffers[1] = outR
+                } else {
+                    if let ptrL = outL.mData, outL.mDataByteSize > 0 { memset(ptrL, 0, Int(outL.mDataByteSize)) }
+                    if let ptrR = outR.mData, outR.mDataByteSize > 0 { memset(ptrR, 0, Int(outR.mDataByteSize)) }
+                }
+
+                if outCount > 2 {
+                    for idx in 2..<outCount {
+                        let extraOut = outBuffers[idx]
+                        if let outData = extraOut.mData, extraOut.mDataByteSize > 0 {
+                            memset(outData, 0, Int(extraOut.mDataByteSize))
+                        }
+                    }
+                }
+                return
+            }
+
+            if outCount == 1,
+               outFirstChannels == 2,
+               inBuffers.count >= 2,
+               inBuffers[inBuffers.count - 2].mNumberChannels == 1,
+               inBuffers[inBuffers.count - 1].mNumberChannels == 1 {
+                let inL = inBuffers[inBuffers.count - 2]
+                let inR = inBuffers[inBuffers.count - 1]
+                var outBuf = outBuffers[0]
+                let inLFrames = Int(inL.mDataByteSize) / MemoryLayout<Float32>.size
+                let inRFrames = Int(inR.mDataByteSize) / MemoryLayout<Float32>.size
+                let outFrames = Int(outBuf.mDataByteSize) / (2 * MemoryLayout<Float32>.size)
+                let frameCount = min(min(inLFrames, inRFrames), outFrames)
+                let outByteCount = frameCount * 2 * MemoryLayout<Float32>.size
+
+                if frameCount > 0,
+                   let inLPtr = inL.mData?.assumingMemoryBound(to: Float32.self),
+                   let inRPtr = inR.mData?.assumingMemoryBound(to: Float32.self),
+                   let outPtr = outBuf.mData?.assumingMemoryBound(to: Float32.self) {
+                    if gain <= 0.0001 {
+                        memset(outPtr, 0, outByteCount)
+                    } else {
+                        var scalar = gain
+                        var low: Float = -1.0
+                        var high: Float = 1.0
+                        vDSP_vsmul(inLPtr, 1, &scalar, outPtr, 2, vDSP_Length(frameCount))
+                        vDSP_vsmul(inRPtr, 1, &scalar, outPtr.advanced(by: 1), 2, vDSP_Length(frameCount))
+                        vDSP_vclip(outPtr, 1, &low, &high, outPtr, 1, vDSP_Length(frameCount * 2))
+                    }
+                    outBuf.mDataByteSize = UInt32(outByteCount)
+                    outBuffers[0] = outBuf
+                } else if let outData = outBuf.mData, outBuf.mDataByteSize > 0 {
+                    memset(outData, 0, Int(outBuf.mDataByteSize))
+                }
+                return
+            }
+
+            let tapStart = inBuffers.count >= outCount ? (inBuffers.count - outCount) : 0
+            let count = min(inBuffers.count - tapStart, outCount)
 
             for idx in 0..<count {
-                let inBuf = inBuffers[idx]
+                let inBuf = inBuffers[tapStart + idx]
                 var outBuf = outBuffers[idx]
                 let byteCount = min(Int(inBuf.mDataByteSize), Int(outBuf.mDataByteSize))
                 guard byteCount > 0,
@@ -208,8 +302,8 @@ nonisolated final class ActiveProcessAudioTap: @unchecked Sendable {
                 outBuffers[idx] = outBuf
             }
 
-            if outBuffers.count > count {
-                for idx in count..<outBuffers.count {
+            if outCount > count {
+                for idx in count..<outCount {
                     let outBuf = outBuffers[idx]
                     if let outData = outBuf.mData, outBuf.mDataByteSize > 0 {
                         memset(outData, 0, Int(outBuf.mDataByteSize))
@@ -349,6 +443,9 @@ final class AudioProcessVolumeManager {
 
     func scheduleRefreshProcesses() {
         guard isMonitoring, !AppInfo.isRunningTests, !isConfiguringTap else { return }
+        let hasActiveUIClient = monitoringClients.contains { $0 != "audioControlFeature" }
+        let hasCustomSettings = !savedVolumes.isEmpty || !savedMuted.isEmpty || !activeTaps.isEmpty
+        guard hasActiveUIClient || hasCustomSettings else { return }
         pendingRefreshTask?.cancel()
         pendingRefreshTask = Task { @MainActor [weak self] in
             try? await Task.sleep(for: .milliseconds(60))
@@ -456,7 +553,7 @@ final class AudioProcessVolumeManager {
             failedTapBackoffUntil.removeAll()
         }
         for session in activeSessions {
-            let needsTap = session.isMuted || abs(session.volume - 1.0) > 0.01
+            let needsTap = session.isMuted || (abs(session.volume - 1.0) > 0.01 && session.isRunningOutput)
             if activeTaps[session.id] != nil || sessionTapOutputUIDs[session.id] != nil || needsTap {
                 applyTap(for: session, outputDeviceUID: newOutputUID)
             }
@@ -599,7 +696,7 @@ final class AudioProcessVolumeManager {
         isConfiguringTap = true
         defer { isConfiguringTap = false }
 
-        let needsTap = session.isMuted || abs(session.volume - 1.0) > 0.01
+        let needsTap = session.isMuted || (abs(session.volume - 1.0) > 0.01 && session.isRunningOutput)
         if !needsTap {
             failedTapBackoffUntil.removeValue(forKey: session.id)
             sessionTapOutputUIDs.removeValue(forKey: session.id)

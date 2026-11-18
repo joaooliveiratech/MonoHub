@@ -42,14 +42,10 @@ nonisolated enum ProcessInspector {
         guard let path = executablePath(of: pid) else { return nil }
         let binaryName = (path as NSString).lastPathComponent.lowercased()
         let isClient = binaryName == "agy" || binaryName == "antigravity"
-        guard isClient || path.contains("Antigravity") || path.contains("language_server"),
+        guard isClient || binaryName.hasPrefix("language_server"),
               let commandLine = commandLine(of: pid) else { return nil }
 
-        let match = Match(pid: pid, executableName: binaryName, arguments: commandLine.arguments)
-        if isClient || binaryName.hasPrefix("language_server") {
-            return match
-        }
-        return match.value(forFlag: "--csrf_token") != nil ? match : nil
+        return Match(pid: pid, executableName: binaryName, arguments: commandLine.arguments)
     }
 
     static func isAlive(_ pid: pid_t) -> Bool {

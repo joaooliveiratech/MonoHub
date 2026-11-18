@@ -253,26 +253,7 @@ enum TileCalculation {
             }
 
             let occupied = calculate(action: action, screen: screen, currentFrame: frame, options: options, cycleIndex: 0)
-            let isAtEdge: Bool = {
-                if wasJustApplied || frame.isApproximatelyEqual(to: occupied, tolerance: 36) {
-                    return true
-                }
-
-                switch direction {
-                case .left:
-                    return abs(frame.minX - occupied.minX) <= 36
-                        && frame.midX <= usable.midX + 24
-                case .right:
-                    return abs(frame.maxX - occupied.maxX) <= 36
-                        && frame.midX >= usable.midX - 24
-                case .up:
-                    return abs(frame.minY - occupied.minY) <= 36
-                        && frame.midY <= usable.midY + 24
-                case .down:
-                    return abs(frame.maxY - occupied.maxY) <= 36
-                        && frame.midY >= usable.midY - 24
-                }
-            }()
+            let isAtEdge = wasJustApplied || frame.isApproximatelyEqual(to: occupied, tolerance: 36)
 
             guard isAtEdge,
                   let neighbor = ScreenLayout.neighbor(of: screen, inDirection: direction, in: layouts) else {

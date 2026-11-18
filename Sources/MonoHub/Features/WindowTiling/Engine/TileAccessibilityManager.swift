@@ -40,7 +40,7 @@ final class TileAccessibilityManager {
 
     @discardableResult
     func refresh() -> Bool {
-        PermissionsManager.shared.refreshStatus()
+        PermissionsManager.shared.refreshAccessibilityAndScreenRecording()
         let trusted = PermissionsManager.shared.hasAccessibility
         if trusted != isTrusted {
             isTrusted = trusted

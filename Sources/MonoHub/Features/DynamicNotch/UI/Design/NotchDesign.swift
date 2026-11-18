@@ -462,12 +462,14 @@ struct EqualizerAnimationView: View {
     var maxHeight: CGFloat = 14
 
     var body: some View {
-        let active = isAnimating && !NotchWindowController.shared.isDisplayAsleep && !AppExclusionManager.shared.isSuppressed
+        let controller = NotchWindowController.shared
+        let visible = !controller.isDisplayAsleep && !AppExclusionManager.shared.isSuppressed
+        let active = isAnimating && controller.isExpanded && visible
         Image(systemName: "waveform")
             .font(.system(size: maxHeight, weight: .semibold))
             .foregroundStyle(tint)
             .symbolEffect(.variableColor.iterative.dimInactiveLayers.nonReversing, options: .repeat(.continuous), isActive: active)
-            .opacity(active ? 1 : 0.55)
+            .opacity(isAnimating && visible ? 1 : 0.55)
             .frame(height: maxHeight)
     }
 }

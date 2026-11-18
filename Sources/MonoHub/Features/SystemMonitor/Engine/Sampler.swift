@@ -220,9 +220,9 @@ nonisolated final class Sampler: @unchecked Sendable {
 
         let wantsProcessScan = current.wantsProcesses || (effectiveLimit > 0 && !effectiveRankings.isEmpty)
         if wantsProcessScan {
-            let isBackgroundOnly = detailed == nil && current.processLimit > 0 && current.processLimit < 5
+            let isBackgroundOnly = detailed == nil && !current.windowAudience && current.processLimit > 0 && current.processLimit < 5
             let cpuHigh = (result.cpu?.totalUsage ?? 0) >= 0.35
-            if !isBackgroundOnly || requestChanged || cpuHigh || tick % 5 == 1 {
+            if !isBackgroundOnly || cpuHigh {
                 let snapshot = processReader.read(limit: effectiveLimit, rankings: effectiveRankings)
                 result.processes = snapshot
                 if !snapshot.topEnergy.isEmpty {

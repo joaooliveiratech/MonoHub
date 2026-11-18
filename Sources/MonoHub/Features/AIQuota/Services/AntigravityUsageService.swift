@@ -319,10 +319,6 @@ actor AntigravityUsageService {
         }
         guard !buckets.isEmpty else { return nil }
 
-        Task { [weak self] in
-            await self?.refreshAvailableModelsIfNeeded(executable: executable, workspace: workspace)
-        }
-
         return status(from: buckets, source: "agy CLI")
     }
 

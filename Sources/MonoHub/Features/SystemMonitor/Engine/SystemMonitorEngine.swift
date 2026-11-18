@@ -254,7 +254,11 @@ final class SystemMonitorEngine {
         var request = SampleRequest()
         var modules = (prefs.isMenuBarActive && StatusItemController.shared.isSetUp) ? prefs.enabledModules : []
         if windowActive {
-            modules.formUnion(ModuleType.allCases)
+            if let focus = windowFocus {
+                modules.insert(focus)
+            } else {
+                modules.formUnion(ModuleType.allCases)
+            }
         }
         if dashboardActive {
             modules.formUnion(dashboardModules)
@@ -263,7 +267,7 @@ final class SystemMonitorEngine {
             modules.formUnion([.cpu, .sensors])
         }
         request.menuBarModules = modules
-        request.windowAudience = windowActive || dashboardActive || notchAudience
+        request.windowAudience = windowActive || dashboardActive
         request.detailedModule = panelModule ?? (windowActive ? windowFocus : nil)
         request.topProcessesLimit = max(prefs.topProcessesCount, 0)
         request.showBatteryProcesses = prefs.showTopProcessesBattery
@@ -316,7 +320,7 @@ final class SystemMonitorEngine {
         let pauseForSleep = prefs.pauseWhenSleeping && (screensAsleep || sessionInactive)
         let hasMenuBarAudience = isFeatureEnabled && prefs.isMenuBarActive && menuBarVisible && StatusItemController.shared.isSetUp && !prefs.enabledModules.isEmpty
         let hasWindowAudience = isFeatureEnabled && (detailedModule != nil || ((windowMonitoringActive || dashboardMonitoringActive) && windowVisible))
-        let hasNotchAudience = isFeatureEnabled && notchAudience
+        let hasNotchAudience = isFeatureEnabled && notchAudience && !NotchWindowController.shared.isDisplayAsleep && !AppExclusionManager.shared.isSuppressed
         let running = isFeatureEnabled && !pauseForSleep && !request.isEmpty && (hasMenuBarAudience || hasWindowAudience || hasNotchAudience)
         sampler.configure(interval: prefs.refreshInterval, running: running)
         let resumed = running && !isSampling
@@ -390,7 +394,7 @@ final class SystemMonitorEngine {
             if let policies = battery.policies {
                 powerPolicies = policies
             }
-            if detailedModule == .battery || (windowMonitoringActive && windowVisible) {
+            if detailedModule == .battery || (windowMonitoringActive && windowVisible && (windowFocusedModule == nil || windowFocusedModule == .battery)) {
                 refreshAccessories(force: false)
                 battery.connectedDevices = accessories
             }

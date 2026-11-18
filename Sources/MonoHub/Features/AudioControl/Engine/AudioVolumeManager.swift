@@ -57,7 +57,7 @@ final class AudioVolumeManager {
         isMonitoring = false
     }
 
-    func setVolume(_ volume: Float) {
+    func setVolume(_ volume: Float, showHUD: Bool = false) {
         guard !isSettingVolume else { return }
         isSettingVolume = true
         lastLocalVolumeWriteAt = Date()
@@ -77,24 +77,26 @@ final class AudioVolumeManager {
             setMuted(false, on: devID)
         }
 
-        let ctx = currentOutputDeviceContext()
-        HUDManager.shared.showHUD(
-            type: .volume,
-            value: clamped,
-            isMuted: isMuted,
-            displayTitle: ctx.title,
-            customIconName: ctx.iconName
-        )
+        if showHUD {
+            let ctx = currentOutputDeviceContext()
+            HUDManager.shared.showHUD(
+                type: .volume,
+                value: clamped,
+                isMuted: isMuted,
+                displayTitle: ctx.title,
+                customIconName: ctx.iconName
+            )
+        }
     }
 
     func increaseVolume(step: Float = 0.0625) {
         syncIfNeeded()
-        setVolume(currentVolume + step)
+        setVolume(currentVolume + step, showHUD: true)
     }
 
     func decreaseVolume(step: Float = 0.0625) {
         syncIfNeeded()
-        setVolume(currentVolume - step)
+        setVolume(currentVolume - step, showHUD: true)
     }
 
     func toggleMute() {
@@ -138,7 +140,7 @@ final class AudioVolumeManager {
         if Date().timeIntervalSince(lastLocalVolumeWriteAt) < 0.20 {
             return
         }
-        readVolume(showHUDOnChange: true)
+        readVolume(showHUDOnChange: false)
     }
 
     private func syncIfNeeded() {

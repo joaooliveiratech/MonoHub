@@ -7,11 +7,16 @@ nonisolated final class BackgroundEventTap: @unchecked Sendable {
     private let lock = NSLock()
     private var runLoop: CFRunLoop?
 
-    init?(mask: CGEventMask, callback: CGEventTapCallBack, userInfo: UnsafeMutableRawPointer?) {
+    init?(
+        mask: CGEventMask,
+        options: CGEventTapOptions = .defaultTap,
+        callback: CGEventTapCallBack,
+        userInfo: UnsafeMutableRawPointer?
+    ) {
         guard let port = CGEvent.tapCreate(
             tap: .cgSessionEventTap,
             place: .headInsertEventTap,
-            options: .defaultTap,
+            options: options,
             eventsOfInterest: mask,
             callback: callback,
             userInfo: userInfo

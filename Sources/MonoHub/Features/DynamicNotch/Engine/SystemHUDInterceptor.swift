@@ -8,6 +8,22 @@ private let NX_KEYTYPE_BRIGHTNESS_UP: Int = 2
 private let NX_KEYTYPE_BRIGHTNESS_DOWN: Int = 3
 private let NX_KEYTYPE_MUTE: Int = 7
 
+nonisolated private final class SystemHUDTapHolder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var tap: BackgroundEventTap?
+
+    func set(_ newTap: BackgroundEventTap?) {
+        lock.withLock {
+            tap = newTap
+        }
+    }
+
+    func reenable() {
+        let current = lock.withLock { tap }
+        current?.reenable()
+    }
+}
+
 nonisolated private func systemHUDEventTapCallback(
     proxy: CGEventTapProxy,
     type: CGEventType,
@@ -15,18 +31,16 @@ nonisolated private func systemHUDEventTapCallback(
     refcon: UnsafeMutableRawPointer?
 ) -> Unmanaged<CGEvent>? {
     if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
-        DispatchQueue.main.async {
-            SystemHUDInterceptor.shared.reEnableTap()
-        }
-        return Unmanaged.passRetained(event)
+        SystemHUDInterceptor.reenableTapFromCallback()
+        return Unmanaged.passUnretained(event)
     }
 
     guard type.rawValue == 14 else {
-        return Unmanaged.passRetained(event)
+        return Unmanaged.passUnretained(event)
     }
 
     guard let nsEvent = NSEvent(cgEvent: event), nsEvent.subtype.rawValue == 8 else {
-        return Unmanaged.passRetained(event)
+        return Unmanaged.passUnretained(event)
     }
 
     let data1 = nsEvent.data1
@@ -37,7 +51,7 @@ nonisolated private func systemHUDEventTapCallback(
     let isKeyUp = (keyState == 0x0B)
 
     guard isKeyDown || isKeyUp else {
-        return Unmanaged.passRetained(event)
+        return Unmanaged.passUnretained(event)
     }
 
     let isTargetKey: Bool
@@ -53,7 +67,7 @@ nonisolated private func systemHUDEventTapCallback(
     }
 
     guard isTargetKey else {
-        return Unmanaged.passRetained(event)
+        return Unmanaged.passUnretained(event)
     }
 
     if isKeyDown {
@@ -71,16 +85,20 @@ nonisolated private func systemHUDEventTapCallback(
 @MainActor
 final class SystemHUDInterceptor {
     static let shared = SystemHUDInterceptor()
+    nonisolated private static let tapHolder = SystemHUDTapHolder()
 
     private(set) var isInterceptionActive: Bool = false
     private(set) var hasAccessibilityPermission: Bool = false
 
-    @ObservationIgnored private var eventTap: CFMachPort?
-    @ObservationIgnored private var runLoopSource: CFRunLoopSource?
+    @ObservationIgnored private var backgroundTap: BackgroundEventTap?
     @ObservationIgnored private var wantsInterception = false
     @ObservationIgnored private var activationObserver: (any NSObjectProtocol)?
 
     private init() {}
+
+    nonisolated static func reenableTapFromCallback() {
+        tapHolder.reenable()
+    }
 
     func checkAccessibility() {
         let trusted = AXIsProcessTrusted()
@@ -122,9 +140,7 @@ final class SystemHUDInterceptor {
     }
 
     func reEnableTap() {
-        if let tap = eventTap {
-            CGEvent.tapEnable(tap: tap, enable: true)
-        }
+        backgroundTap?.reenable()
     }
 
     fileprivate func handleKey(_ keyCode: Int) {
@@ -158,39 +174,30 @@ final class SystemHUDInterceptor {
     }
 
     private func installTap() {
-        guard wantsInterception, eventTap == nil else { return }
+        guard wantsInterception, backgroundTap == nil else { return }
         checkAccessibility()
         guard hasAccessibilityPermission else { return }
 
-        guard let tap = CGEvent.tapCreate(
-            tap: .cgSessionEventTap,
-            place: .headInsertEventTap,
-            options: .defaultTap,
-            eventsOfInterest: CGEventMask(1 << 14),
+        guard let tap = BackgroundEventTap(
+            mask: CGEventMask(1 << 14),
             callback: systemHUDEventTapCallback,
             userInfo: nil
         ) else {
             return
         }
 
-        eventTap = tap
-        let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0)
-        runLoopSource = source
-        CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
-        CGEvent.tapEnable(tap: tap, enable: true)
+        backgroundTap = tap
+        Self.tapHolder.set(tap)
+        tap.start(name: "MonoHub.SystemHUDTap")
         isInterceptionActive = true
     }
 
     private func removeTap() {
-        if let tap = eventTap {
-            CGEvent.tapEnable(tap: tap, enable: false)
-            CFMachPortInvalidate(tap)
+        Self.tapHolder.set(nil)
+        if let tap = backgroundTap {
+            tap.invalidate()
+            backgroundTap = nil
         }
-        if let source = runLoopSource {
-            CFRunLoopRemoveSource(CFRunLoopGetMain(), source, .commonModes)
-        }
-        runLoopSource = nil
-        eventTap = nil
         if isInterceptionActive {
             isInterceptionActive = false
         }

@@ -66,7 +66,17 @@ final class DisplayManager {
         screenInfos.contains { $0.hasHardwareNotch }
     }
 
+    private struct PhysicalScreenMetrics: Equatable {
+        let frame: CGRect
+        let visibleMaxY: CGFloat
+        let safeAreaTop: CGFloat
+        let auxiliaryLeftWidth: CGFloat?
+        let auxiliaryRightWidth: CGFloat?
+    }
+
     @ObservationIgnored private var screenObserver: (any NSObjectProtocol)?
+    @ObservationIgnored private var physicalMetricsCache: [String: PhysicalScreenMetrics] = [:]
+    @ObservationIgnored private(set) var topBandFrames: [CGRect] = []
 
     private init() {}
 
@@ -89,22 +99,55 @@ final class DisplayManager {
             NotificationCenter.default.removeObserver(screenObserver)
             self.screenObserver = nil
         }
+        physicalMetricsCache.removeAll()
+        topBandFrames.removeAll()
     }
 
     func refreshDisplays() {
+        var nextCache: [String: PhysicalScreenMetrics] = [:]
+        var nextTopBands: [CGRect] = []
         let infos = NSScreen.screens.map { screen in
-            ScreenInfo(
-                id: screenIdentifier(for: screen),
+            let id = screenIdentifier(for: screen)
+            let safeTop = screen.safeAreaInsets.top
+            let frame = screen.frame
+            nextCache[id] = PhysicalScreenMetrics(
+                frame: frame,
+                visibleMaxY: screen.visibleFrame.maxY,
+                safeAreaTop: safeTop,
+                auxiliaryLeftWidth: screen.auxiliaryTopLeftArea?.width,
+                auxiliaryRightWidth: screen.auxiliaryTopRightArea?.width
+            )
+            nextTopBands.append(CGRect(x: frame.minX, y: frame.maxY - 90, width: frame.width, height: 90))
+            return ScreenInfo(
+                id: id,
                 name: screen.localizedName,
                 isBuiltin: isScreenBuiltin(screen),
-                hasHardwareNotch: screen.safeAreaInsets.top > 0,
-                safeAreaTop: screen.safeAreaInsets.top,
-                frame: screen.frame
+                hasHardwareNotch: safeTop > 0,
+                safeAreaTop: safeTop,
+                frame: frame
             )
         }
+        physicalMetricsCache = nextCache
+        topBandFrames = nextTopBands
         if infos != screenInfos {
             screenInfos = infos
         }
+    }
+
+    private func cachedMetrics(for screen: NSScreen) -> PhysicalScreenMetrics {
+        let id = screenIdentifier(for: screen)
+        if let cached = physicalMetricsCache[id] {
+            return cached
+        }
+        let metrics = PhysicalScreenMetrics(
+            frame: screen.frame,
+            visibleMaxY: screen.visibleFrame.maxY,
+            safeAreaTop: screen.safeAreaInsets.top,
+            auxiliaryLeftWidth: screen.auxiliaryTopLeftArea?.width,
+            auxiliaryRightWidth: screen.auxiliaryTopRightArea?.width
+        )
+        physicalMetricsCache[id] = metrics
+        return metrics
     }
 
     func isScreenEnabled(_ screen: NSScreen) -> Bool {
@@ -112,7 +155,7 @@ final class DisplayManager {
         let id = screenIdentifier(for: screen)
         let isBuiltin = isScreenBuiltin(screen)
         let isMain = screen == NSScreen.main
-        let hasHardwareNotch = screen.safeAreaInsets.top > 0
+        let hasHardwareNotch = cachedMetrics(for: screen).safeAreaTop > 0
 
         if !hasHardwareNotch && !prefs.enableVirtualNotch {
             return false
@@ -146,23 +189,22 @@ final class DisplayManager {
             )
         }
 
-        let hasNotch = screen.safeAreaInsets.top > 0
+        let metrics = DisplayManager.shared.cachedMetrics(for: screen)
+        let hasNotch = metrics.safeAreaTop > 0
         var calculatedWidth: CGFloat = preferences.closedNotchWidth
         var calculatedHeight: CGFloat = preferences.closedNotchHeight
 
         if hasNotch {
-
-            calculatedHeight = screen.safeAreaInsets.top
+            calculatedHeight = metrics.safeAreaTop
             var physicalWidth: CGFloat = 185
-            if let leftPadding = screen.auxiliaryTopLeftArea?.width,
-               let rightPadding = screen.auxiliaryTopRightArea?.width {
-                physicalWidth = screen.frame.width - leftPadding - rightPadding
+            if let leftPadding = metrics.auxiliaryLeftWidth,
+               let rightPadding = metrics.auxiliaryRightWidth {
+                physicalWidth = metrics.frame.width - leftPadding - rightPadding
             }
             calculatedWidth = physicalWidth
         } else {
-
             if preferences.enableVirtualNotch {
-                let menuBarHeight = max(24, screen.frame.maxY - screen.visibleFrame.maxY)
+                let menuBarHeight = max(24, metrics.frame.maxY - metrics.visibleMaxY)
                 calculatedHeight = max(preferences.closedNotchHeight, menuBarHeight)
                 calculatedWidth = preferences.closedNotchWidth
             } else {
@@ -173,8 +215,8 @@ final class DisplayManager {
 
         return ScreenNotchGeometry(
             hasHardwareNotch: hasNotch,
-            screenFrame: screen.frame,
-            safeAreaTop: screen.safeAreaInsets.top,
+            screenFrame: metrics.frame,
+            safeAreaTop: metrics.safeAreaTop,
             notchWidth: calculatedWidth,
             notchHeight: calculatedHeight
         )

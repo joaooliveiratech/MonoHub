@@ -28,6 +28,7 @@ final class IdleInteractionMonitor {
     static let shared = IdleInteractionMonitor()
 
     private(set) var isInteracting: Bool = false
+    private(set) var tickDate: Date = Date()
 
     @ObservationIgnored private(set) var strokeCount: Int = 0
     @ObservationIgnored private(set) var energy: Double = 0.0
@@ -37,8 +38,6 @@ final class IdleInteractionMonitor {
     @ObservationIgnored private var lastTickTimestamp: TimeInterval = Date().timeIntervalSinceReferenceDate
     @ObservationIgnored private var lastKeyBoostTimestamp: TimeInterval = 0
     @ObservationIgnored private var lastAnyBoostTimestamp: TimeInterval = 0
-    @ObservationIgnored private var lastKeyIdleSeconds: CFTimeInterval = 999
-    @ObservationIgnored private var lastClickIdleSeconds: CFTimeInterval = 999
 
     @ObservationIgnored private var continuousPhase: Double = 0.0
     @ObservationIgnored private var interactivePhase: Double = 0.0
@@ -47,17 +46,21 @@ final class IdleInteractionMonitor {
     @ObservationIgnored private var globalMonitor: Any?
     @ObservationIgnored private var localMouseMonitor: Any?
     @ObservationIgnored private var globalMouseMonitor: Any?
-    @ObservationIgnored private var pollTimer: Timer?
+    @ObservationIgnored private var idleTimer: Timer?
+    @ObservationIgnored private var renderTimer: Timer?
+    @ObservationIgnored private var currentRenderInterval: TimeInterval = 0
+    @ObservationIgnored private var activeViewCount: Int = 0
     @ObservationIgnored private var burstTask: Task<Void, Never>?
     @ObservationIgnored private var isMonitoring = false
 
-    private static let sleepAfterIdle: TimeInterval = 1.3
+    private static let sleepAfterIdle: TimeInterval = 1.2
 
     private init() {}
 
     func ensureStarted() {
         guard !isMonitoring, !AppInfo.isRunningTests else { return }
         guard NotchPreferences.shared.idleAnimation != .none else { return }
+        guard !NotchWindowController.shared.isDisplayAsleep, !AppExclusionManager.shared.isSuppressed else { return }
         isMonitoring = true
         lastTickTimestamp = Date().timeIntervalSinceReferenceDate
 
@@ -77,7 +80,7 @@ final class IdleInteractionMonitor {
         localMouseMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { event in
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
-                    IdleInteractionMonitor.shared.wake()
+                    IdleInteractionMonitor.shared.recordMouseFromMonitor()
                 }
             }
             return event
@@ -85,9 +88,10 @@ final class IdleInteractionMonitor {
 
         globalMouseMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
             MainActor.assumeIsolated {
-                self?.wake()
+                self?.recordMouseFromMonitor()
             }
         }
+        syncRenderTimer()
     }
 
     func stop() {
@@ -95,7 +99,8 @@ final class IdleInteractionMonitor {
         isMonitoring = false
         burstTask?.cancel()
         burstTask = nil
-        sleepTimer()
+        cancelIdleTimer()
+        stopRenderTimer()
         for monitor in [localMonitor, globalMonitor, localMouseMonitor, globalMouseMonitor] {
             if let monitor { NSEvent.removeMonitor(monitor) }
         }
@@ -108,24 +113,101 @@ final class IdleInteractionMonitor {
         if isInteracting { isInteracting = false }
     }
 
-    private func wake() {
-        guard isMonitoring, pollTimer == nil else { return }
-        let timer = Timer(timeInterval: 0.08, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated {
-                self?.tick()
-            }
-        }
-        timer.tolerance = 0.025
-        RunLoop.main.add(timer, forMode: .common)
-        pollTimer = timer
+    func registerActiveView() {
+        activeViewCount += 1
+        syncRenderTimer()
     }
 
-    private func sleepTimer() {
-        pollTimer?.invalidate()
-        pollTimer = nil
+    func unregisterActiveView() {
+        activeViewCount = max(0, activeViewCount - 1)
+        syncRenderTimer()
+    }
+
+    func syncRenderTimer() {
+        guard isMonitoring,
+              !AppInfo.isRunningTests,
+              activeViewCount > 0,
+              NotchPreferences.shared.idleAnimation != .none,
+              !NotchWindowController.shared.isDisplayAsleep,
+              !AppExclusionManager.shared.isSuppressed,
+              !NotchWindowController.shared.isExpanded else {
+            stopRenderTimer()
+            return
+        }
+        let mode = NotchPreferences.shared.idleInteractionMode
+        guard mode == .alwaysActive || isInteracting else {
+            stopRenderTimer()
+            return
+        }
+        let desiredInterval: TimeInterval = isInteracting ? 0.125 : 0.25
+        if let timer = renderTimer, timer.isValid, abs(currentRenderInterval - desiredInterval) < 0.001 {
+            return
+        }
+        stopRenderTimer()
+        currentRenderInterval = desiredInterval
+        let timer = Timer(timeInterval: desiredInterval, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.tickDate = Date()
+            }
+        }
+        timer.tolerance = desiredInterval * 0.25
+        RunLoop.main.add(timer, forMode: .common)
+        renderTimer = timer
+    }
+
+    private func stopRenderTimer() {
+        renderTimer?.invalidate()
+        renderTimer = nil
+        currentRenderInterval = 0
+    }
+
+    private func cancelIdleTimer() {
+        idleTimer?.invalidate()
+        idleTimer = nil
+    }
+
+    private func scheduleIdleSleep() {
+        guard isMonitoring, !AppInfo.isRunningTests else { return }
+        let now = Date().timeIntervalSinceReferenceDate
+        let elapsed = max(0.0, now - lastAnyBoostTimestamp)
+        let remaining = max(0.1, Self.sleepAfterIdle - elapsed)
+        let targetDate = Date(timeIntervalSinceNow: remaining)
+        if let timer = idleTimer, timer.isValid {
+            timer.fireDate = targetDate
+            return
+        }
+        let timer = Timer(timeInterval: remaining, repeats: false) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.checkIdleSleep()
+            }
+        }
+        timer.tolerance = 0.2
+        RunLoop.main.add(timer, forMode: .common)
+        idleTimer = timer
+    }
+
+    private func checkIdleSleep() {
+        idleTimer = nil
+        guard isMonitoring else { return }
+        let now = Date().timeIntervalSinceReferenceDate
+        let elapsed = max(0.0, now - lastAnyBoostTimestamp)
+        if elapsed < Self.sleepAfterIdle {
+            scheduleIdleSleep()
+            return
+        }
+        advancePhases(to: now)
+        energy = 0
+        typingEnergy = 0
+        if isInteracting {
+            isInteracting = false
+            tickDate = Date()
+            syncRenderTimer()
+        }
     }
 
     private func recordKeyFromMonitor() {
+        guard !NotchWindowController.shared.isDisplayAsleep, !AppExclusionManager.shared.isSuppressed else { return }
         let now = Date().timeIntervalSinceReferenceDate
         advancePhases(to: now)
         if now - lastKeyBoostTimestamp > 0.025 {
@@ -135,7 +217,26 @@ final class IdleInteractionMonitor {
         typingEnergy = min(1.0, max(typingEnergy + 0.45, 0.85))
         energy = min(1.0, max(energy + 0.45, 0.85))
         lastAnyBoostTimestamp = now
-        wake()
+        if !isInteracting {
+            isInteracting = true
+            tickDate = Date()
+            syncRenderTimer()
+        }
+        scheduleIdleSleep()
+    }
+
+    private func recordMouseFromMonitor() {
+        guard !NotchWindowController.shared.isDisplayAsleep, !AppExclusionManager.shared.isSuppressed else { return }
+        let now = Date().timeIntervalSinceReferenceDate
+        advancePhases(to: now)
+        energy = min(1.0, max(energy + 0.28, 0.62))
+        lastAnyBoostTimestamp = now
+        if !isInteracting {
+            isInteracting = true
+            tickDate = Date()
+            syncRenderTimer()
+        }
+        scheduleIdleSleep()
     }
 
     func recordEvent(isKey: Bool = true) {
@@ -153,11 +254,12 @@ final class IdleInteractionMonitor {
             lastAnyBoostTimestamp = now
         }
 
-        wake()
-
-        if AppInfo.isRunningTests {
+        if !isInteracting {
             isInteracting = true
+            tickDate = Date()
+            syncRenderTimer()
         }
+        scheduleIdleSleep()
     }
 
     func simulateTypingBurst(strokes: Int = 8) {
@@ -174,67 +276,18 @@ final class IdleInteractionMonitor {
         }
     }
 
-    private func tick() {
-        let prefs = NotchPreferences.shared
-        guard prefs.idleAnimation != .none else {
-            if isInteracting { isInteracting = false }
-            return
-        }
-
-        let now = Date().timeIntervalSinceReferenceDate
-
-        if !AppInfo.isRunningTests && prefs.idleInteractionMode != .alwaysActive {
-            let keyIdle = CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: .keyDown)
-            let leftClickIdle = CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: .leftMouseDown)
-            let rightClickIdle = CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: .rightMouseDown)
-            let clickIdle = min(leftClickIdle, rightClickIdle)
-
-            let isFreshKey = keyIdle < 0.095 && (keyIdle + 0.006 < lastKeyIdleSeconds || keyIdle < 0.025)
-            if isFreshKey {
-                if now - lastKeyBoostTimestamp > 0.032 {
-                    strokeCount &+= 1
-                    lastKeyBoostTimestamp = now
-                }
-                typingEnergy = min(1.0, max(typingEnergy + 0.42, 0.82))
-                energy = min(1.0, max(energy + 0.42, 0.82))
-                lastAnyBoostTimestamp = now
-            } else if clickIdle < 0.095 && clickIdle + 0.006 < lastClickIdleSeconds {
-                energy = min(1.0, max(energy + 0.28, 0.62))
-                lastAnyBoostTimestamp = now
-            }
-
-            lastKeyIdleSeconds = keyIdle
-            lastClickIdleSeconds = clickIdle
-        }
-
-        advancePhases(to: now)
-
-        let curEnergy = decayedEnergy(at: now)
-        let curTyping = decayedTypingEnergy(at: now)
-        energy = curEnergy
-        typingEnergy = curTyping
-
-        let activeNow = curEnergy > 0.08 || curTyping > 0.08
-        if isInteracting != activeNow {
-            isInteracting = activeNow
-        }
-
-        if !activeNow && (now - lastAnyBoostTimestamp >= Self.sleepAfterIdle) && prefs.idleInteractionMode != .alwaysActive {
-            sleepTimer()
-        }
-    }
-
     private func advancePhases(to now: TimeInterval) {
-        let dt = min(0.25, max(0.0, now - lastTickTimestamp))
-        guard dt > 0 else { return }
+        let rawDt = max(0.0, now - lastTickTimestamp)
+        guard rawDt > 0 else { return }
+        let interactiveDt = min(30.0, rawDt)
         lastTickTimestamp = now
 
         let speed = max(0.4, min(2.5, NotchPreferences.shared.idleAnimationSpeed))
         let curEnergy = decayedEnergy(at: now)
 
-        continuousPhase += dt * speed
+        continuousPhase += rawDt * speed
         let interactiveRate = curEnergy > 0.08 ? (0.55 + curEnergy * 0.55) : 0.16
-        interactivePhase += dt * speed * interactiveRate
+        interactivePhase += interactiveDt * speed * interactiveRate
     }
 
     private func decayedEnergy(at now: TimeInterval) -> Double {
@@ -268,11 +321,11 @@ final class IdleInteractionMonitor {
     ) -> IdleInteractionSnapshot {
         let now = date.timeIntervalSinceReferenceDate
         let ambient = max(0.0, now - startTimestamp)
-        let extraDt = min(0.15, max(0.0, now - lastTickTimestamp))
+        let rawExtraDt = max(0.0, now - lastTickTimestamp)
         let speed = max(0.4, min(2.5, speedMultiplier))
 
         if mode == .alwaysActive {
-            let phase = continuousPhase + extraDt * speed
+            let phase = continuousPhase + rawExtraDt * speed
             let syntheticStrokes = Int(phase * 5.5)
             return IdleInteractionSnapshot(
                 phase: phase,
@@ -289,6 +342,7 @@ final class IdleInteractionMonitor {
         let curEnergy = decayedEnergy(at: now)
         let curTyping = decayedTypingEnergy(at: now)
         let interactiveRate = curEnergy > 0.08 ? (0.55 + curEnergy * 0.55) : 0.16
+        let extraDt = min(30.0, rawExtraDt)
         let phase = interactivePhase + extraDt * speed * interactiveRate
         let typingNow = curTyping > 0.12
         let activeNow = curEnergy > 0.10 || typingNow

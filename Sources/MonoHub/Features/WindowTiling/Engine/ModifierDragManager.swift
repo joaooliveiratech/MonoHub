@@ -23,9 +23,10 @@ final class ModifierDragManager: NSObject {
         var pendingFrame: CGRect?
     }
 
-    private struct EventTap {
+    private final class EventTap {
         let port: CFMachPort
         let source: CFRunLoopSource
+        private(set) var isEnabled = true
 
         init?(events: [CGEventType]) {
             let mask = events.reduce(CGEventMask(0)) { $0 | (CGEventMask(1) << $1.rawValue) }
@@ -43,7 +44,14 @@ final class ModifierDragManager: NSObject {
         }
 
         func setEnabled(_ enabled: Bool) {
+            guard isEnabled != enabled else { return }
+            isEnabled = enabled
             CGEvent.tapEnable(tap: port, enable: enabled)
+        }
+
+        func forceReenable() {
+            isEnabled = true
+            CGEvent.tapEnable(tap: port, enable: true)
         }
 
         func invalidate() {
@@ -121,8 +129,12 @@ final class ModifierDragManager: NSObject {
     }
 
     fileprivate func reenableTaps() {
-        pressTap?.setEnabled(isArmed)
-        trackingTap?.setEnabled(session != nil)
+        if isArmed {
+            pressTap?.forceReenable()
+        }
+        if session != nil {
+            trackingTap?.forceReenable()
+        }
     }
 
     fileprivate func handle(type: CGEventType, point: CGPoint, flags: CGEventFlags) -> Bool {
@@ -225,10 +237,13 @@ nonisolated private func modifierDragEventCallback(
     event: CGEvent,
     userInfo: UnsafeMutableRawPointer?
 ) -> Unmanaged<CGEvent>? {
-    if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+    if type == .tapDisabledByTimeout {
         MainActor.assumeIsolated {
             ModifierDragManager.shared.reenableTaps()
         }
+        return Unmanaged.passUnretained(event)
+    }
+    if type == .tapDisabledByUserInput {
         return Unmanaged.passUnretained(event)
     }
 

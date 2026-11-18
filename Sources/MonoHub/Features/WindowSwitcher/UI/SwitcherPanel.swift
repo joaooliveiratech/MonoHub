@@ -175,7 +175,6 @@ final class SwitcherPanelController: NSObject, NSWindowDelegate, SwitcherHotkeyM
         if restoringFocus, NSApp.isActive {
             previousApp?.activate()
         }
-        prewarmCapture()
         scheduleIdlePurge()
     }
 

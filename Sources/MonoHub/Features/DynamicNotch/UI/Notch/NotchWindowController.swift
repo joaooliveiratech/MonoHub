@@ -65,7 +65,13 @@ final class NotchHostingView<Content: View>: NSHostingView<Content> {
 final class NotchWindowController {
     static let shared = NotchWindowController()
 
-    var expandedScreens: Set<String> = []
+    var expandedScreens: Set<String> = [] {
+        didSet {
+            if expandedScreens.isEmpty != oldValue.isEmpty {
+                IdleInteractionMonitor.shared.syncRenderTimer()
+            }
+        }
+    }
     var navigationGraceUntil: Date?
     var previousExpandedHeight: CGFloat = 0
     var isMenuTracking: Bool = false
@@ -217,29 +223,45 @@ final class NotchWindowController {
         isDisplayAsleep = asleep
         if asleep {
             expandedScreens.removeAll()
+            IdleInteractionMonitor.shared.stop()
             for panel in windows.values {
                 panel.orderOut(nil)
             }
         } else if !AppExclusionManager.shared.isSuppressed {
+            if NotchFeature.isRunning, NotchPreferences.shared.idleAnimation != .none {
+                IdleInteractionMonitor.shared.ensureStarted()
+            }
             refreshWindows()
         }
+        SystemMonitorEngine.shared.reloadConfiguration()
     }
 
     func setScrollMonitoring(_ enabled: Bool) {
         if enabled {
             guard isRunning, globalScrollMonitor == nil, localScrollMonitor == nil else { return }
             globalScrollMonitor = NSEvent.addGlobalMonitorForEvents(matching: .scrollWheel) { event in
+                guard !NotchWindowController.shared.isDisplayAsleep, !AppExclusionManager.shared.isSuppressed else { return }
                 let location = NSEvent.mouseLocation
-
-                guard NSScreen.screens.contains(where: { location.y >= $0.frame.maxY - 90 && $0.frame.minX <= location.x && location.x <= $0.frame.maxX }) else { return }
+                let topBands = DisplayManager.shared.topBandFrames
+                if !topBands.isEmpty {
+                    guard topBands.contains(where: { $0.contains(location) }) else { return }
+                } else {
+                    guard NSScreen.screens.contains(where: { location.y >= $0.frame.maxY - 90 && $0.frame.minX <= location.x && location.x <= $0.frame.maxX }) else { return }
+                }
                 let deltaY = event.scrollingDeltaY
                 MainActor.assumeIsolated {
                     _ = NotchWindowController.shared.processScroll(deltaY: deltaY, at: location)
                 }
             }
             localScrollMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { event in
+                guard !NotchWindowController.shared.isDisplayAsleep, !AppExclusionManager.shared.isSuppressed else { return event }
                 let location = NSEvent.mouseLocation
-                guard NSScreen.screens.contains(where: { location.y >= $0.frame.maxY - 90 && $0.frame.minX <= location.x && location.x <= $0.frame.maxX }) else { return event }
+                let topBands = DisplayManager.shared.topBandFrames
+                if !topBands.isEmpty {
+                    guard topBands.contains(where: { $0.contains(location) }) else { return event }
+                } else {
+                    guard NSScreen.screens.contains(where: { location.y >= $0.frame.maxY - 90 && $0.frame.minX <= location.x && location.x <= $0.frame.maxX }) else { return event }
+                }
                 return NotchWindowController.shared.processScroll(deltaY: event.scrollingDeltaY, at: location) ? nil : event
             }
         } else {
@@ -303,14 +325,19 @@ final class NotchWindowController {
     private func handleSuppressionChange(_ suppressed: Bool) {
         if suppressed {
             expandedScreens.removeAll()
+            IdleInteractionMonitor.shared.stop()
             for panel in windows.values {
                 panel.orderOut(nil)
             }
         } else {
+            if !isDisplayAsleep, NotchFeature.isRunning, NotchPreferences.shared.idleAnimation != .none {
+                IdleInteractionMonitor.shared.ensureStarted()
+            }
             for panel in windows.values {
                 panel.orderFrontRegardless()
             }
         }
+        SystemMonitorEngine.shared.reloadConfiguration()
     }
 
     func refreshWindows() {

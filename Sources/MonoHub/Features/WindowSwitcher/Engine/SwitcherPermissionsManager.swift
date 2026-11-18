@@ -60,7 +60,7 @@ final class SwitcherPermissionsManager: SwitcherPermissionsManaging {
         if !force, let lastRefresh, now - lastRefresh < Self.cacheLifetime { return }
         lastRefresh = now
 
-        PermissionsManager.shared.refreshStatus()
+        PermissionsManager.shared.refreshAccessibilityAndScreenRecording()
         let accessibility = PermissionsManager.shared.hasAccessibility
         let screenRecording = PermissionsManager.shared.hasScreenRecording
         if hasAccessibility != accessibility { hasAccessibility = accessibility }

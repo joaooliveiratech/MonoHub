@@ -132,11 +132,13 @@ final class StatusItemController: NSObject {
             slot.lastContent = content
             let image = MenuBarRenderer.image(for: content)
             let length = image.size.width + MenuBarRenderer.itemPadding * 2
-            if slot.item.length != length {
+            if abs(slot.item.length - length) > 0.01 {
                 slot.item.length = length
             }
-            button.image = image
-            button.setAccessibilityLabel(content.accessibilityLabel)
+            if button.image !== image {
+                button.image = image
+                button.setAccessibilityLabel(content.accessibilityLabel)
+            }
         }
     }
 

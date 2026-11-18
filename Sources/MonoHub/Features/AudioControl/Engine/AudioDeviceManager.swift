@@ -315,9 +315,8 @@ final class AudioDeviceManager {
         }
 
         var didSet = Self.setSystemDefaultOutputDevice(id: resolved.id)
-        var actualDefaultID = Self.defaultOutputDeviceID()
 
-        if !didSet || actualDefaultID != resolved.id {
+        if !didSet {
             let scanned = Self.scanHALDevices()
             updateDeviceLists(outputs: scanned.outputs, inputs: scanned.inputs)
             let fresh = Self.resolveLiveDevice(resolved, in: scanned.outputs)
@@ -326,10 +325,11 @@ final class AudioDeviceManager {
                 armOutputGuard(for: resolved)
             }
             didSet = Self.setSystemDefaultOutputDevice(id: resolved.id)
-            actualDefaultID = Self.defaultOutputDeviceID()
         }
 
-        if Self.isBluetoothAudioDevice(resolved) && (!didSet || actualDefaultID != resolved.id) {
+        let actualDefaultID = Self.defaultOutputDeviceID()
+
+        if Self.isBluetoothAudioDevice(resolved) && !didSet {
             Self.ensureBluetoothAudioConnected(for: resolved)
         }
 
@@ -758,10 +758,7 @@ final class AudioDeviceManager {
     }
 
     private var isMeteringEnabledForActiveConsumers: Bool {
-        if activeConsumers.contains("AudioControlView") {
-            return true
-        }
-        return !activeConsumers.isEmpty && NotchPreferences.shared.musicEnableMicLevelMeter
+        !activeConsumers.isEmpty && NotchPreferences.shared.musicEnableMicLevelMeter
     }
 
     private var shouldAvoidStartingMeterOnProtectedBluetoothMic: Bool {
@@ -1162,6 +1159,16 @@ final class AudioDeviceManager {
         activeConsumers.remove(consumer)
         if !isMeteringEnabledForActiveConsumers {
             stopMeterEngineIfRunning()
+        }
+    }
+
+    func syncMeteringState() {
+        guard !AppInfo.isRunningTests else { return }
+        if !isMeteringEnabledForActiveConsumers || shouldAvoidStartingMeterOnProtectedBluetoothMic {
+            stopMeterEngineIfRunning()
+        } else {
+            let devID = currentInputDeviceID != kAudioObjectUnknown ? currentInputDeviceID : Self.defaultInputDeviceID()
+            startMeterEngineIfNeeded(for: devID)
         }
     }
 
