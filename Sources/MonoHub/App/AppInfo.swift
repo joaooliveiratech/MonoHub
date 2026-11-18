@@ -3,8 +3,8 @@ import Foundation
 nonisolated enum AppInfo {
     static let name = "MonoHub"
     static let appName = "MonoHub"
-    static let version = "0.17.4"
-    static let build = "60"
+    static let version = "0.17.5"
+    static let build = "61"
     static var userAgent: String { "\(name)/\(version)" }
     static let bundleId = "com.antigravity.monohub"
     static let bundleIdentifier = "com.antigravity.monohub"

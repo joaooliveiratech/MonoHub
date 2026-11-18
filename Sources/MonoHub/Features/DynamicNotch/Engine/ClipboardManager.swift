@@ -16,6 +16,9 @@ final class ClipboardManager {
     @ObservationIgnored private var isRunning: Bool = false
     @ObservationIgnored private var monitorTimer: Timer?
     @ObservationIgnored private var sleepObservers: [any NSObjectProtocol] = []
+    @ObservationIgnored private var distributedObservers: [any NSObjectProtocol] = []
+    @ObservationIgnored private var isScreenAsleep: Bool = false
+    @ObservationIgnored private var isSessionLocked: Bool = false
     @ObservationIgnored private var lastChangeCount: Int = -1
     @ObservationIgnored private var isInternalWrite: Bool = false
     @ObservationIgnored private let thumbnailCache = NSCache<NSString, NSImage>()
@@ -136,13 +139,14 @@ final class ClipboardManager {
     func stop() {
         guard isRunning else { return }
         isRunning = false
-        monitorTimer?.invalidate()
-        monitorTimer = nil
+        stopTimer()
         unregisterSleepObservers()
+        isScreenAsleep = false
+        isSessionLocked = false
     }
 
     private func startTimer() {
-        guard isRunning, monitorTimer == nil else { return }
+        guard isRunning, !isScreenAsleep, !isSessionLocked, monitorTimer == nil else { return }
         let timer = Timer(timeInterval: 1.2, repeats: true) { _ in
             MainActor.assumeIsolated {
                 ClipboardManager.shared.pollPasteboard()
@@ -153,26 +157,52 @@ final class ClipboardManager {
         monitorTimer = timer
     }
 
+    private func stopTimer() {
+        monitorTimer?.invalidate()
+        monitorTimer = nil
+    }
+
     private func registerSleepObservers() {
         unregisterSleepObservers()
         let nc = NSWorkspace.shared.notificationCenter
-        let sleepNames = [NSWorkspace.screensDidSleepNotification, NSWorkspace.sessionDidResignActiveNotification]
-        for name in sleepNames {
-            sleepObservers.append(nc.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
-                MainActor.assumeIsolated {
-                    self?.monitorTimer?.invalidate()
-                    self?.monitorTimer = nil
-                }
-            })
-        }
-        let wakeNames = [NSWorkspace.screensDidWakeNotification, NSWorkspace.sessionDidBecomeActiveNotification]
-        for name in wakeNames {
-            sleepObservers.append(nc.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
-                MainActor.assumeIsolated {
-                    self?.startTimer()
-                }
-            })
-        }
+        let distributed = DistributedNotificationCenter.default()
+
+        sleepObservers.append(nc.addObserver(forName: NSWorkspace.screensDidSleepNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.isScreenAsleep = true
+                self?.stopTimer()
+            }
+        })
+        sleepObservers.append(nc.addObserver(forName: NSWorkspace.screensDidWakeNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.isScreenAsleep = false
+                self?.startTimer()
+            }
+        })
+        sleepObservers.append(nc.addObserver(forName: NSWorkspace.sessionDidResignActiveNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.isSessionLocked = true
+                self?.stopTimer()
+            }
+        })
+        sleepObservers.append(nc.addObserver(forName: NSWorkspace.sessionDidBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.isSessionLocked = false
+                self?.startTimer()
+            }
+        })
+        distributedObservers.append(distributed.addObserver(forName: Notification.Name("com.apple.screenIsLocked"), object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.isSessionLocked = true
+                self?.stopTimer()
+            }
+        })
+        distributedObservers.append(distributed.addObserver(forName: Notification.Name("com.apple.screenIsUnlocked"), object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.isSessionLocked = false
+                self?.startTimer()
+            }
+        })
     }
 
     private func unregisterSleepObservers() {
@@ -181,6 +211,11 @@ final class ClipboardManager {
             nc.removeObserver(observer)
         }
         sleepObservers.removeAll()
+        let distributed = DistributedNotificationCenter.default()
+        for observer in distributedObservers {
+            distributed.removeObserver(observer)
+        }
+        distributedObservers.removeAll()
     }
 
     func pollPasteboard() {

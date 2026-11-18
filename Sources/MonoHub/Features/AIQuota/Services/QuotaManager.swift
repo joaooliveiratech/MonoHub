@@ -29,6 +29,12 @@ final class QuotaManager {
     @ObservationIgnored
     private var workspaceObservers: [any NSObjectProtocol] = []
     @ObservationIgnored
+    private var distributedObservers: [any NSObjectProtocol] = []
+    @ObservationIgnored
+    private var isScreenAsleep = false
+    @ObservationIgnored
+    private var isSessionLocked = false
+    @ObservationIgnored
     private var isRunning = false
 
     private static let staleAfter: TimeInterval = 20.0
@@ -69,6 +75,13 @@ final class QuotaManager {
             center.removeObserver(observer)
         }
         workspaceObservers.removeAll()
+        let distributed = DistributedNotificationCenter.default()
+        for observer in distributedObservers {
+            distributed.removeObserver(observer)
+        }
+        distributedObservers.removeAll()
+        isScreenAsleep = false
+        isSessionLocked = false
         Task { await FileWatcher.shared.stop() }
     }
 
@@ -301,28 +314,70 @@ final class QuotaManager {
         }
     }
 
+    private func suspendForSleepOrLock() {
+        refreshLoop?.cancel()
+        refreshLoop = nil
+        wakeDebounce?.cancel()
+        wakeDebounce = nil
+        resetBoundaryTask?.cancel()
+        resetBoundaryTask = nil
+        Task { await FileWatcher.shared.stop() }
+    }
+
+    private func resumeIfAwakeAndUnlocked() {
+        guard isRunning, !isScreenAsleep, !isSessionLocked else { return }
+        handleWake()
+    }
+
     private func observeSleepAndWake() {
         let center = NSWorkspace.shared.notificationCenter
+        let distributed = DistributedNotificationCenter.default()
 
         for name in [NSWorkspace.willSleepNotification, NSWorkspace.screensDidSleepNotification] {
             workspaceObservers.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
                 MainActor.assumeIsolated {
-                    self?.refreshLoop?.cancel()
-                    self?.refreshLoop = nil
-                    self?.wakeDebounce?.cancel()
-                    self?.wakeDebounce = nil
-                    self?.resetBoundaryTask?.cancel()
-                    self?.resetBoundaryTask = nil
-                    Task { await FileWatcher.shared.stop() }
+                    self?.isScreenAsleep = true
+                    self?.suspendForSleepOrLock()
                 }
             })
         }
 
         for name in [NSWorkspace.didWakeNotification, NSWorkspace.screensDidWakeNotification] {
             workspaceObservers.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
-                MainActor.assumeIsolated { self?.handleWake() }
+                MainActor.assumeIsolated {
+                    self?.isScreenAsleep = false
+                    self?.resumeIfAwakeAndUnlocked()
+                }
             })
         }
+
+        workspaceObservers.append(center.addObserver(forName: NSWorkspace.sessionDidResignActiveNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.isSessionLocked = true
+                self?.suspendForSleepOrLock()
+            }
+        })
+
+        workspaceObservers.append(center.addObserver(forName: NSWorkspace.sessionDidBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.isSessionLocked = false
+                self?.resumeIfAwakeAndUnlocked()
+            }
+        })
+
+        distributedObservers.append(distributed.addObserver(forName: Notification.Name("com.apple.screenIsLocked"), object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.isSessionLocked = true
+                self?.suspendForSleepOrLock()
+            }
+        })
+
+        distributedObservers.append(distributed.addObserver(forName: Notification.Name("com.apple.screenIsUnlocked"), object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.isSessionLocked = false
+                self?.resumeIfAwakeAndUnlocked()
+            }
+        })
 
         for name in [NSWorkspace.didLaunchApplicationNotification, NSWorkspace.didTerminateApplicationNotification] {
             workspaceObservers.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] notification in
@@ -331,9 +386,9 @@ final class QuotaManager {
                 let bundle = (app?.bundleIdentifier ?? "").lowercased()
                 if name.contains("antigravity") || bundle.contains("antigravity") {
                     Task { @MainActor [weak self] in
-
                         try? await Task.sleep(for: .seconds(2.0))
-                        await self?.refresh(provider: .antigravity, force: true)
+                        guard let self, !self.isScreenAsleep, !self.isSessionLocked else { return }
+                        await self.refresh(provider: .antigravity, force: true)
                     }
                 }
             })

@@ -758,7 +758,7 @@ final class AudioDeviceManager {
     }
 
     private var isMeteringEnabledForActiveConsumers: Bool {
-        !activeConsumers.isEmpty && NotchPreferences.shared.musicEnableMicLevelMeter
+        !activeConsumers.isEmpty && NotchPreferences.shared.musicEnableMicLevelMeter && !NotchWindowController.shared.isDisplayAsleep
     }
 
     private var shouldAvoidStartingMeterOnProtectedBluetoothMic: Bool {

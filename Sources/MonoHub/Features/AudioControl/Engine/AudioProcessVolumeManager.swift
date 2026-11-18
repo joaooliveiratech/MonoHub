@@ -461,6 +461,7 @@ final class AudioProcessVolumeManager {
             guard refreshTimer == nil else { return }
             let timer = Timer(timeInterval: 2.0, repeats: true) { _ in
                 MainActor.assumeIsolated {
+                    guard !NotchWindowController.shared.isDisplayAsleep else { return }
                     AudioProcessVolumeManager.shared.refreshProcesses()
                 }
             }

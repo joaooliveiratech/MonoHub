@@ -53,6 +53,7 @@ final class TileAccessibilityManager {
         while !isTrusted, !Task.isCancelled {
             try? await Task.sleep(for: Self.pollInterval, tolerance: .milliseconds(500))
             guard !Task.isCancelled else { return }
+            if NotchWindowController.shared.isDisplayAsleep { continue }
             refresh()
         }
     }

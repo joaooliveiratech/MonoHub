@@ -72,6 +72,7 @@ final class SwitcherPermissionsManager: SwitcherPermissionsManaging {
         while !allGranted, !Task.isCancelled {
             try? await Task.sleep(for: Self.pollInterval, tolerance: .milliseconds(500))
             guard !Task.isCancelled else { return }
+            if NotchWindowController.shared.isDisplayAsleep { continue }
             refresh(force: true)
         }
     }

@@ -100,6 +100,12 @@ final class NotchWindowController {
     @ObservationIgnored private var menuEndObserver: (any NSObjectProtocol)?
     @ObservationIgnored private var sleepObserver: (any NSObjectProtocol)?
     @ObservationIgnored private var wakeObserver: (any NSObjectProtocol)?
+    @ObservationIgnored private var screensAsleep = false
+    @ObservationIgnored private var sessionLockedOrInactive = false
+    @ObservationIgnored private var sessionResignObserver: (any NSObjectProtocol)?
+    @ObservationIgnored private var sessionActiveObserver: (any NSObjectProtocol)?
+    @ObservationIgnored private var screenLockObserver: (any NSObjectProtocol)?
+    @ObservationIgnored private var screenUnlockObserver: (any NSObjectProtocol)?
     @ObservationIgnored private var layoutTask: Task<Void, Never>?
     @ObservationIgnored private var localScrollMonitor: Any?
     @ObservationIgnored private var globalScrollMonitor: Any?
@@ -126,7 +132,9 @@ final class NotchWindowController {
             queue: .main
         ) { _ in
             MainActor.assumeIsolated {
-                NotchWindowController.shared.handleScreenSleep(true)
+                let controller = NotchWindowController.shared
+                controller.screensAsleep = true
+                controller.updateSleepAndLockState()
             }
         }
 
@@ -136,7 +144,57 @@ final class NotchWindowController {
             queue: .main
         ) { _ in
             MainActor.assumeIsolated {
-                NotchWindowController.shared.handleScreenSleep(false)
+                let controller = NotchWindowController.shared
+                controller.screensAsleep = false
+                controller.updateSleepAndLockState()
+            }
+        }
+
+        sessionResignObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.sessionDidResignActiveNotification,
+            object: nil,
+            queue: .main
+        ) { _ in
+            MainActor.assumeIsolated {
+                let controller = NotchWindowController.shared
+                controller.sessionLockedOrInactive = true
+                controller.updateSleepAndLockState()
+            }
+        }
+
+        sessionActiveObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.sessionDidBecomeActiveNotification,
+            object: nil,
+            queue: .main
+        ) { _ in
+            MainActor.assumeIsolated {
+                let controller = NotchWindowController.shared
+                controller.sessionLockedOrInactive = false
+                controller.updateSleepAndLockState()
+            }
+        }
+
+        screenLockObserver = DistributedNotificationCenter.default().addObserver(
+            forName: Notification.Name("com.apple.screenIsLocked"),
+            object: nil,
+            queue: .main
+        ) { _ in
+            MainActor.assumeIsolated {
+                let controller = NotchWindowController.shared
+                controller.sessionLockedOrInactive = true
+                controller.updateSleepAndLockState()
+            }
+        }
+
+        screenUnlockObserver = DistributedNotificationCenter.default().addObserver(
+            forName: Notification.Name("com.apple.screenIsUnlocked"),
+            object: nil,
+            queue: .main
+        ) { _ in
+            MainActor.assumeIsolated {
+                let controller = NotchWindowController.shared
+                controller.sessionLockedOrInactive = false
+                controller.updateSleepAndLockState()
             }
         }
 
@@ -201,6 +259,25 @@ final class NotchWindowController {
             NSWorkspace.shared.notificationCenter.removeObserver(wakeObserver)
             self.wakeObserver = nil
         }
+        if let sessionResignObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(sessionResignObserver)
+            self.sessionResignObserver = nil
+        }
+        if let sessionActiveObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(sessionActiveObserver)
+            self.sessionActiveObserver = nil
+        }
+        if let screenLockObserver {
+            DistributedNotificationCenter.default().removeObserver(screenLockObserver)
+            self.screenLockObserver = nil
+        }
+        if let screenUnlockObserver {
+            DistributedNotificationCenter.default().removeObserver(screenUnlockObserver)
+            self.screenUnlockObserver = nil
+        }
+        screensAsleep = false
+        sessionLockedOrInactive = false
+        isDisplayAsleep = false
         if let menuBeginObserver {
             NotificationCenter.default.removeObserver(menuBeginObserver)
             self.menuBeginObserver = nil
@@ -219,11 +296,20 @@ final class NotchWindowController {
         windows.removeAll()
     }
 
+    private func updateSleepAndLockState() {
+        let asleepOrLocked = screensAsleep || sessionLockedOrInactive
+        guard isDisplayAsleep != asleepOrLocked else { return }
+        handleScreenSleep(asleepOrLocked)
+    }
+
     private func handleScreenSleep(_ asleep: Bool) {
         isDisplayAsleep = asleep
         if asleep {
             expandedScreens.removeAll()
             IdleInteractionMonitor.shared.stop()
+            CameraMirrorManager.shared.releaseResources()
+            TeleprompterManager.shared.pause()
+            HUDManager.shared.hide()
             for panel in windows.values {
                 panel.orderOut(nil)
             }
@@ -233,6 +319,7 @@ final class NotchWindowController {
             }
             refreshWindows()
         }
+        AudioDeviceManager.shared.syncMeteringState()
         SystemMonitorEngine.shared.reloadConfiguration()
     }
 

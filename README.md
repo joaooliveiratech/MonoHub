@@ -1,7 +1,7 @@
 # MonoHub
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-v0.17.4-brightgreen.svg" alt="Versão v0.17.4" />
+  <img src="https://img.shields.io/badge/version-v0.17.5-brightgreen.svg" alt="Versão v0.17.5" />
   <img src="https://img.shields.io/badge/macOS-27.0%2B-blue.svg" alt="macOS 27.0+" />
   <img src="https://img.shields.io/badge/architecture-arm64%20Apple%20Silicon-orange.svg" alt="ARM64" />
   <img src="https://img.shields.io/badge/Swift-6.4-red.svg" alt="Swift 6.4" />

@@ -47,6 +47,7 @@ final class SystemMonitorEngine {
     @ObservationIgnored private var request = SampleRequest()
     @ObservationIgnored private var isSampling = false
     @ObservationIgnored private var observers: [(center: NotificationCenter, token: any NSObjectProtocol)] = []
+    @ObservationIgnored private var distributedObservers: [any NSObjectProtocol] = []
     @ObservationIgnored private var powerSourceLoop: CFRunLoopSource?
     @ObservationIgnored private var policyTask: Task<Void, Never>?
     @ObservationIgnored private let accessoryReader = AccessoryBatteryReader()
@@ -54,6 +55,7 @@ final class SystemMonitorEngine {
     @ObservationIgnored private var lastAccessoryRead: Date = .distantPast
     @ObservationIgnored private var screensAsleep = false
     @ObservationIgnored private var sessionInactive = false
+    @ObservationIgnored private var screenLocked = false
     @ObservationIgnored private var menuBarVisible = true
     @ObservationIgnored private var windowMonitoringActive = false
     @ObservationIgnored private var dashboardMonitoringActive = false
@@ -109,6 +111,7 @@ final class SystemMonitorEngine {
         isSampling = false
         screensAsleep = false
         sessionInactive = false
+        screenLocked = false
         menuBarVisible = true
         windowMonitoringActive = false
         dashboardMonitoringActive = false
@@ -317,7 +320,7 @@ final class SystemMonitorEngine {
         guard let sampler else { return }
         let isFeatureEnabled = FeatureManager.shared.isEnabled(.systemMonitor)
         let prefs = MonitorPreferences.shared
-        let pauseForSleep = prefs.pauseWhenSleeping && (screensAsleep || sessionInactive)
+        let pauseForSleep = screenLocked || sessionInactive || (prefs.pauseWhenSleeping && screensAsleep)
         let hasMenuBarAudience = isFeatureEnabled && prefs.isMenuBarActive && menuBarVisible && StatusItemController.shared.isSetUp && !prefs.enabledModules.isEmpty
         let hasWindowAudience = isFeatureEnabled && (detailedModule != nil || ((windowMonitoringActive || dashboardMonitoringActive) && windowVisible))
         let hasNotchAudience = isFeatureEnabled && notchAudience && !NotchWindowController.shared.isDisplayAsleep && !AppExclusionManager.shared.isSuppressed
@@ -457,6 +460,23 @@ final class SystemMonitorEngine {
             observers.append((workspace, token))
         }
 
+        let distributed = DistributedNotificationCenter.default()
+        let lockHandlers: [(Notification.Name, @MainActor (SystemMonitorEngine) -> Void)] = [
+            (Notification.Name("com.apple.screenIsLocked"), { $0.screenLocked = true }),
+            (Notification.Name("com.apple.screenIsUnlocked"), { $0.screenLocked = false })
+        ]
+        for (name, handler) in lockHandlers {
+            let token = distributed.addObserver(forName: name, object: nil, queue: .main) { _ in
+                MainActor.assumeIsolated {
+                    let engine = SystemMonitorEngine.shared
+                    guard engine.isActive else { return }
+                    handler(engine)
+                    engine.updateRunningState()
+                }
+            }
+            distributedObservers.append(token)
+        }
+
         let powerToken = NotificationCenter.default.addObserver(
             forName: Notification.Name.NSProcessInfoPowerStateDidChange,
             object: nil,
@@ -474,6 +494,11 @@ final class SystemMonitorEngine {
             observer.center.removeObserver(observer.token)
         }
         observers.removeAll()
+        let distributed = DistributedNotificationCenter.default()
+        for observer in distributedObservers {
+            distributed.removeObserver(observer)
+        }
+        distributedObservers.removeAll()
         if let powerSourceLoop {
             CFRunLoopRemoveSource(CFRunLoopGetMain(), powerSourceLoop, .defaultMode)
             CFRunLoopSourceInvalidate(powerSourceLoop)
