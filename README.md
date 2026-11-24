@@ -1,7 +1,7 @@
 # MonoHub
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-v0.17.5-brightgreen.svg" alt="Versão v0.17.5" />
+  <img src="https://img.shields.io/badge/version-v0.17.6-brightgreen.svg" alt="Versão v0.17.6" />
   <img src="https://img.shields.io/badge/macOS-27.0%2B-blue.svg" alt="macOS 27.0+" />
   <img src="https://img.shields.io/badge/architecture-arm64%20Apple%20Silicon-orange.svg" alt="ARM64" />
   <img src="https://img.shields.io/badge/Swift-6.4-red.svg" alt="Swift 6.4" />
@@ -211,19 +211,25 @@ Dentro do Notch Dinâmico, cada recurso (Música, Agenda, Lembretes, Bluetooth, 
   - Acesso direto ao arquivo gerado com o botão **Revelar no Finder**.
 
 ### 🪟 5. Organização & Encaixe de Janelas (Tile)
-- **🧲 Encaixe Magnético nas Bordas (Edge Drag Snapping)**:
+- **🧲 Encaixe Magnético nas Bordas em Liquid Glass (Edge Drag Snapping)**:
   - Arraste janelas para as bordas e cantos da tela para organizá-las instantaneamente em metades, quadrantes ou maximizar.
-  - Prévia visual com animação fluida e retorno tátil (haptic feedback no trackpad).
+  - Prévia translúcida nativa em **macOS 27 Liquid Glass** (`NSGlassEffectView`) com pílula indicadora da ação, animação fluida contínua e retorno tátil (haptic feedback no trackpad).
   - Restauração automática de tamanho ao mover uma janela previamente encaixada.
   - Zonas de terços na borda inferior e sensibilidade magnética ajustável.
-- **⌨️ 26 Atalhos Globais de Alta Performance**:
+- **🧠 Foco Inteligente & Fila MRU (Alternância Instantânea)**:
+  - **Alternar Última Janela (`⌃⌥⌘⇥`)**: alternância imediata (*back-and-forth* estilo AeroSpace/i3) entre a janela atual e a anterior, com fallback automático para a próxima janela viva caso a anterior tenha sido fechada.
+  - **Fila de Foco MRU (`⌃⌥⌘]` / `⌃⌥⌘[`)**: navegação orientada a sessão pela pilha de janelas recentes (`B → C → D → A`) sem oscilar, com HUD flutuante em **macOS 27 Liquid Glass** exibindo a ordem da fila e o item selecionado.
+  - **Trocar Posição com Última Janela (`⌃⌥⌘↩`)**: troca instantaneamente o enquadramento entre a janela ativa e a janela anterior da fila.
+  - **Foco Direcional com Desempate MRU (`⌃⌥⌘` + setas)**: prioriza vizinhos alinhados, desempata janelas empilhadas pela ordem MRU mais recente e oferece fallback configurável (ir para última janela, circular na borda oposta ou parar na borda), escopo por monitor e opção de cursor acompanhar o foco.
+- **⌨️ 30 Atalhos Globais & Motor de Alta Performance**:
   - Organização em metades (`⌥⇧←`, `⌥⇧→`, `⌥⇧↑`, `⌥⇧↓`) com ciclo inteligente (`1/2` → `2/3` → `1/3`).
   - Quadrantes (`⌥⇧U`, `⌥⇧I`, `⌥⇧J`, `⌥⇧K`), terços (`⌥⇧D`, `⌥⇧F`, `⌥⇧G`) e dois terços (`⌥⇧E`, `⌥⇧T`).
   - Maximizar (`⌥⇧↩`), Quase Maximizar (`⌥⇧␣`), Centralizar (`⌥⇧C`) e Restaurar/Desfazer (`⌥⇧⌫`).
-  - Movimentação entre múltiplos monitores (`⌥⇧⌘→`, `⌥⇧⌘←`) e foco direcional (`⌃⌥⌘` + setas).
+  - Movimentação entre múltiplos monitores (`⌥⇧⌘→`, `⌥⇧⌘←`), foco direcional e fila de foco (`⌃⌥⌘`).
+  - Chamadas AX agrupadas em lote, cache de monitores e PIDs, lookup direto por `CGWindowID` e observação orientada a eventos (`AXObserver`) com zero polling em segundo plano.
   - Gravador de atalhos inline e busca em tempo real na interface.
 - **🖱️ Arrasto por Modificadores (Modifier Drag)**:
-  - Mova qualquer janela segurando `⌃⌥` (ou `⌃⌘`, `⌥⌘`) e clicando em qualquer ponto da janela.
+  - Mova qualquer janela segurando `⌃⌥` (ou `⌃⌘`, `⌥⌘`) e clicando em qualquer ponto da janela, com suspensão única de `AXEnhancedUserInterface` durante a sessão para fluidez nativa a 120Hz ProMotion.
   - Redimensione pelo canto mais próximo com o botão direito do mouse.
 - **🚫 Aplicativos Ignorados & Spacing**:
   - Defina apps que o MonoHub deve ignorar, margens externas (0–32 pt) e espaçamento entre janelas (0–32 pt).

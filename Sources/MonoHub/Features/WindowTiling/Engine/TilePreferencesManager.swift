@@ -35,6 +35,10 @@ final class TilePreferencesManager {
         static let excludedBundleIdentifiers = "MonoHub_Tile_excludedBundleIdentifiers"
         static let showMenuBarIcon = "MonoHub_Tile_showMenuBarIcon"
         static let moveToAdjacentDisplayOnEdge = "MonoHub_Tile_moveToAdjacentDisplayOnEdge"
+        static let focusScope = "MonoHub_Tile_focusScope"
+        static let directionalFocusFallback = "MonoHub_Tile_directionalFocusFallback"
+        static let showFocusHUD = "MonoHub_Tile_showFocusHUD"
+        static let warpCursorOnFocus = "MonoHub_Tile_warpCursorOnFocus"
 
         static let legacyOuterMargin = "outerMargin"
         static let legacyWindowGap = "windowGap"
@@ -128,7 +132,31 @@ final class TilePreferencesManager {
         didSet { defaults.set(showMenuBarIcon, forKey: Keys.showMenuBarIcon) }
     }
 
+    var focusScope: FocusScope {
+        didSet { defaults.set(focusScope.rawValue, forKey: Keys.focusScope) }
+    }
+
+    var directionalFocusFallback: DirectionalFocusFallback {
+        didSet { defaults.set(directionalFocusFallback.rawValue, forKey: Keys.directionalFocusFallback) }
+    }
+
+    var showFocusHUD: Bool {
+        didSet { defaults.set(showFocusHUD, forKey: Keys.showFocusHUD) }
+    }
+
+    var warpCursorOnFocus: Bool {
+        didSet { defaults.set(warpCursorOnFocus, forKey: Keys.warpCursorOnFocus) }
+    }
+
     private(set) var excludedBundleIdentifiers: [String] = []
+    @ObservationIgnored private var excludedBundleSet: Set<String> = []
+    @ObservationIgnored private var pidBundleCache: [pid_t: String] = [:]
+
+    var activeShortcutCount: Int {
+        WindowAction.allCases.reduce(into: 0) { count, action in
+            if shortcut(for: action) != nil { count += 1 }
+        }
+    }
 
     var tileOptions: TileOptions {
         TileOptions(
@@ -205,8 +233,14 @@ final class TilePreferencesManager {
 
         showMenuBarIcon = readBool(primary: Keys.showMenuBarIcon, fallback: Keys.legacyShowMenuBarIcon, defaultVal: false)
 
+        focusScope = defaults.string(forKey: Keys.focusScope).flatMap(FocusScope.init(rawValue:)) ?? .allDisplays
+        directionalFocusFallback = defaults.string(forKey: Keys.directionalFocusFallback).flatMap(DirectionalFocusFallback.init(rawValue:)) ?? .lastWindow
+        showFocusHUD = defaults.object(forKey: Keys.showFocusHUD) != nil ? defaults.bool(forKey: Keys.showFocusHUD) : true
+        warpCursorOnFocus = defaults.bool(forKey: Keys.warpCursorOnFocus)
+
         let excluded = defaults.stringArray(forKey: Keys.excludedBundleIdentifiers) ?? defaults.stringArray(forKey: Keys.legacyExcludedBundleIdentifiers) ?? []
         excludedBundleIdentifiers = Self.sanitizedBundleIdentifiers(excluded)
+        excludedBundleSet = Set(excludedBundleIdentifiers)
 
         loadShortcuts()
     }
@@ -242,22 +276,37 @@ final class TilePreferencesManager {
 
     func isExcluded(bundleIdentifier: String?) -> Bool {
         guard let bundleIdentifier else { return false }
-        return excludedBundleIdentifiers.contains(bundleIdentifier)
+        return excludedBundleSet.contains(bundleIdentifier)
     }
 
     func isExcluded(processIdentifier: pid_t) -> Bool {
-        guard !excludedBundleIdentifiers.isEmpty else { return false }
-        return isExcluded(bundleIdentifier: NSRunningApplication(processIdentifier: processIdentifier)?.bundleIdentifier)
+        guard !excludedBundleSet.isEmpty else { return false }
+        if let cached = pidBundleCache[processIdentifier] {
+            return excludedBundleSet.contains(cached)
+        }
+        guard let bundleIdentifier = NSRunningApplication(processIdentifier: processIdentifier)?.bundleIdentifier else {
+            return false
+        }
+        if pidBundleCache.count > 128 {
+            pidBundleCache.removeAll(keepingCapacity: true)
+        }
+        pidBundleCache[processIdentifier] = bundleIdentifier
+        return excludedBundleSet.contains(bundleIdentifier)
+    }
+
+    func invalidateProcessCache(pid: pid_t) {
+        pidBundleCache.removeValue(forKey: pid)
     }
 
     func setExcluded(_ excluded: Bool, bundleIdentifier: String) {
-        var identifiers = Set(excludedBundleIdentifiers)
+        var identifiers = excludedBundleSet
         if excluded {
             identifiers.insert(bundleIdentifier)
         } else {
             identifiers.remove(bundleIdentifier)
         }
         excludedBundleIdentifiers = Self.sanitizedBundleIdentifiers(Array(identifiers))
+        excludedBundleSet = Set(excludedBundleIdentifiers)
         defaults.set(excludedBundleIdentifiers, forKey: Keys.excludedBundleIdentifiers)
     }
 
@@ -347,6 +396,10 @@ struct PreferencesSnapshot: Codable, Sendable {
     var excludedBundleIdentifiers: [String]?
     var showMenuBarIcon: Bool?
     var moveToAdjacentDisplayOnEdge: Bool?
+    var focusScope: String?
+    var directionalFocusFallback: String?
+    var showFocusHUD: Bool?
+    var warpCursorOnFocus: Bool?
 }
 
 extension TilePreferencesManager {
@@ -370,7 +423,11 @@ extension TilePreferencesManager {
             disabledShortcuts: disabledShortcuts.sorted(),
             excludedBundleIdentifiers: excludedBundleIdentifiers,
             showMenuBarIcon: showMenuBarIcon,
-            moveToAdjacentDisplayOnEdge: moveToAdjacentDisplayOnEdge
+            moveToAdjacentDisplayOnEdge: moveToAdjacentDisplayOnEdge,
+            focusScope: focusScope.rawValue,
+            directionalFocusFallback: directionalFocusFallback.rawValue,
+            showFocusHUD: showFocusHUD,
+            warpCursorOnFocus: warpCursorOnFocus
         )
     }
 
@@ -391,9 +448,14 @@ extension TilePreferencesManager {
         if let value = snapshot.dragModifier.flatMap(DragModifier.init(rawValue:)) { dragModifier = value }
         if let value = snapshot.isModifierDragEnabled { isModifierDragEnabled = value }
         if let value = snapshot.showMenuBarIcon { showMenuBarIcon = value }
+        if let value = snapshot.focusScope.flatMap(FocusScope.init(rawValue:)) { focusScope = value }
+        if let value = snapshot.directionalFocusFallback.flatMap(DirectionalFocusFallback.init(rawValue:)) { directionalFocusFallback = value }
+        if let value = snapshot.showFocusHUD { showFocusHUD = value }
+        if let value = snapshot.warpCursorOnFocus { warpCursorOnFocus = value }
 
         if let identifiers = snapshot.excludedBundleIdentifiers {
             excludedBundleIdentifiers = Self.sanitizedBundleIdentifiers(identifiers)
+            excludedBundleSet = Set(excludedBundleIdentifiers)
             defaults.set(excludedBundleIdentifiers, forKey: Keys.excludedBundleIdentifiers)
         }
 

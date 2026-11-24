@@ -690,3 +690,181 @@ struct TilingLifecycleTests {
         #expect(traversed?.0 == TileCalculation.calculate(action: .rightHalf, screen: leftScreen, currentFrame: fullLeftHalf, options: options))
     }
 }
+
+@Suite("Window Tiling Smart Focus & MRU Queue")
+@MainActor
+struct SmartFocusQueueTests {
+    private func makeRef(_ id: CGWindowID, app: String = "App", display: Int = 0, bounds: CGRect = CGRect(x: 0, y: 0, width: 800, height: 600)) -> FocusWindowRef {
+        FocusWindowRef(windowID: id, pid: pid_t(100 + id), appName: app, title: "Win \(id)", bounds: bounds, displayIndex: display)
+    }
+
+    @Test("Switch to last window toggles back-and-forth between the two most recent windows")
+    func backAndForthToggle() {
+        let a = makeRef(1, app: "Xcode")
+        let b = makeRef(2, app: "Safari")
+        let c = makeRef(3, app: "Terminal")
+        let live = [a, b, c]
+
+        var queue = FocusQueue()
+        queue.recordFocus(c)
+        queue.recordFocus(b)
+        queue.recordFocus(a)
+
+        // From A -> switches to B
+        let first = queue.switchToLastWindow(currentID: a.windowID, liveWindows: live, scope: .allDisplays, currentDisplayIndex: 0)
+        #expect(first?.target.windowID == b.windowID)
+
+        // From B -> switches back to A
+        let second = queue.switchToLastWindow(currentID: b.windowID, liveWindows: live, scope: .allDisplays, currentDisplayIndex: 0)
+        #expect(second?.target.windowID == a.windowID)
+    }
+
+    @Test("Switch to last window gracefully falls back to next live window when previous window closed")
+    func deadPreviousWindowFallback() {
+        let a = makeRef(1, app: "Xcode")
+        let b = makeRef(2, app: "Safari")
+        let c = makeRef(3, app: "Terminal")
+
+        var queue = FocusQueue()
+        queue.recordFocus(c)
+        queue.recordFocus(b)
+        queue.recordFocus(a)
+
+        // Window B was closed; only A and C remain live
+        let result = queue.switchToLastWindow(currentID: a.windowID, liveWindows: [a, c], scope: .allDisplays, currentDisplayIndex: 0)
+        #expect(result?.target.windowID == c.windowID)
+    }
+
+    @Test("Session-aware queue stepping traverses entire queue without oscillating and commits on settle")
+    func sessionSteppingAndCommit() {
+        let a = makeRef(1, app: "Xcode")
+        let b = makeRef(2, app: "Safari")
+        let c = makeRef(3, app: "Terminal")
+        let d = makeRef(4, app: "Slack")
+        let live = [a, b, c, d]
+
+        var queue = FocusQueue(sessionTimeout: 1.25)
+        let t0 = Date(timeIntervalSince1970: 1000)
+        queue.recordFocus(d, now: t0)
+        queue.recordFocus(c, now: t0.addingTimeInterval(1))
+        queue.recordFocus(b, now: t0.addingTimeInterval(2))
+        queue.recordFocus(a, now: t0.addingTimeInterval(3))
+
+        // Rapid step 1: A -> B (index 1)
+        let s1 = queue.step(direction: 1, currentID: a.windowID, liveWindows: live, scope: .allDisplays, currentDisplayIndex: 0, now: t0.addingTimeInterval(10))
+        #expect(s1?.target.windowID == b.windowID)
+        #expect(s1?.selectedIndex == 1)
+
+        // OS notifies focus changed to B during session -> must NOT corrupt snapshot
+        queue.recordFocus(b, now: t0.addingTimeInterval(10.05))
+
+        // Rapid step 2: B -> C (index 2), NOT ping-ponging back to A
+        let s2 = queue.step(direction: 1, currentID: b.windowID, liveWindows: live, scope: .allDisplays, currentDisplayIndex: 0, now: t0.addingTimeInterval(10.3))
+        #expect(s2?.target.windowID == c.windowID)
+        #expect(s2?.selectedIndex == 2)
+
+        // Rapid step backward: C -> B (index 1)
+        let s3 = queue.step(direction: -1, currentID: c.windowID, liveWindows: live, scope: .allDisplays, currentDisplayIndex: 0, now: t0.addingTimeInterval(10.5))
+        #expect(s3?.target.windowID == b.windowID)
+        #expect(s3?.selectedIndex == 1)
+
+        // Rapid step forward x2: B -> C -> D (index 3)
+        _ = queue.step(direction: 1, currentID: b.windowID, liveWindows: live, scope: .allDisplays, currentDisplayIndex: 0, now: t0.addingTimeInterval(10.7))
+        let s5 = queue.step(direction: 1, currentID: c.windowID, liveWindows: live, scope: .allDisplays, currentDisplayIndex: 0, now: t0.addingTimeInterval(10.9))
+        #expect(s5?.target.windowID == d.windowID)
+        #expect(s5?.selectedIndex == 3)
+
+        // Commit session -> D becomes index 0, A stays immediately behind at index 1
+        let landed = queue.commitSession()
+        #expect(landed?.windowID == d.windowID)
+        #expect(queue.entries.first?.windowID == d.windowID)
+        #expect(queue.entries.dropFirst().first?.windowID == a.windowID)
+    }
+
+    @Test("Current-display focus scope restricts queue switching to the active monitor")
+    func currentDisplayScopeFiltering() {
+        let d0A = makeRef(1, app: "Xcode", display: 0)
+        let d1B = makeRef(2, app: "Safari", display: 1)
+        let d0C = makeRef(3, app: "Terminal", display: 0)
+        let live = [d0A, d1B, d0C]
+
+        var queue = FocusQueue()
+        queue.recordFocus(d0C)
+        queue.recordFocus(d1B)
+        queue.recordFocus(d0A)
+
+        let scoped = queue.switchToLastWindow(currentID: d0A.windowID, liveWindows: live, scope: .currentDisplay, currentDisplayIndex: 0)
+        #expect(scoped?.target.windowID == d0C.windowID)
+    }
+
+    @Test("Smart directional focus uses MRU recency to break ties among stacked adjacent windows")
+    func directionalFocusMRUTieBreaker() {
+        // Tall Left Half window next to stacked Top-Right and Bottom-Right quarters
+        let leftHalf = CGRect(x: 0, y: 25, width: 960, height: 1055)
+        let topRight = CGRect(x: 960, y: 25, width: 960, height: 527)
+        let bottomRight = CGRect(x: 960, y: 552, width: 960, height: 528)
+
+        // Bottom-Right was more recently used (rank 1) than Top-Right (rank 2)
+        let candidates = [
+            WindowNavigationCandidate(windowID: 1, bounds: leftHalf, mruRank: 0),
+            WindowNavigationCandidate(windowID: 2, bounds: topRight, mruRank: 2),
+            WindowNavigationCandidate(windowID: 3, bounds: bottomRight, mruRank: 1)
+        ]
+
+        let chosen = WindowNavigator.smartNearest(from: leftHalf, toward: .right, among: candidates, sourceWindowID: 1)
+        #expect(chosen == 2) // index 2 = Bottom-Right (windowID 3)
+    }
+
+    @Test("Smart directional focus handles partially overlapping windows and wrap-around")
+    func directionalOverlapAndWrapAround() {
+        let left = CGRect(x: 0, y: 100, width: 900, height: 700)
+        let overlappingRight = CGRect(x: 650, y: 120, width: 900, height: 700)
+        let candidates = [
+            WindowNavigationCandidate(windowID: 1, bounds: left, mruRank: 0),
+            WindowNavigationCandidate(windowID: 2, bounds: overlappingRight, mruRank: 1)
+        ]
+
+        let rightIndex = WindowNavigator.smartNearest(from: left, toward: .right, among: candidates, sourceWindowID: 1)
+        #expect(rightIndex == 1)
+
+        // No window to the left of `left` -> wrapAround picks rightmost (`overlappingRight`)
+        #expect(WindowNavigator.smartNearest(from: left, toward: .left, among: candidates, sourceWindowID: 1) == nil)
+        let wrapped = WindowNavigator.wrapAround(from: left, toward: .left, among: candidates, sourceWindowID: 1)
+        #expect(wrapped == 1)
+    }
+
+    @Test("Smart focus preferences persist and round-trip through PreferencesSnapshot")
+    func smartFocusPreferencesRoundTrip() {
+        let suiteSource = "com.antigravity.monohub.tests.tile.smartfocus.source"
+        let suiteTarget = "com.antigravity.monohub.tests.tile.smartfocus.target"
+        let sourceDefaults = UserDefaults(suiteName: suiteSource)!
+        let targetDefaults = UserDefaults(suiteName: suiteTarget)!
+        sourceDefaults.removePersistentDomain(forName: suiteSource)
+        targetDefaults.removePersistentDomain(forName: suiteTarget)
+        defer {
+            sourceDefaults.removePersistentDomain(forName: suiteSource)
+            targetDefaults.removePersistentDomain(forName: suiteTarget)
+        }
+
+        let source = TilePreferencesManager(defaults: sourceDefaults)
+        source.focusScope = .currentDisplay
+        source.directionalFocusFallback = .wrapAround
+        source.showFocusHUD = false
+        source.warpCursorOnFocus = true
+
+        let snapshot = source.snapshot()
+        let target = TilePreferencesManager(defaults: targetDefaults)
+        target.apply(snapshot)
+
+        #expect(target.focusScope == .currentDisplay)
+        #expect(target.directionalFocusFallback == .wrapAround)
+        #expect(target.showFocusHUD == false)
+        #expect(target.warpCursorOnFocus == true)
+    }
+
+    @Test("FocusQueuePanel release without presentation is safe")
+    func releaseFocusQueuePanel() {
+        FocusQueuePanel.release()
+        FocusQueuePanel.release()
+    }
+}

@@ -108,17 +108,25 @@ struct ShortcutRecorderView: View {
                 .help(localized("Clear Shortcut"))
             }
         }
-        .padding(.horizontal, 8)
-        .frame(width: 136, height: 26)
+        .padding(.horizontal, 9)
+        .frame(width: 142, height: 27)
         .background(
-            isRecording ? AnyShapeStyle(Color.accentColor.opacity(0.18)) : AnyShapeStyle(Color(NSColor.controlBackgroundColor)),
-            in: RoundedRectangle(cornerRadius: 6, style: .continuous)
+            isRecording
+                ? AnyShapeStyle(Color.accentColor.opacity(0.18))
+                : AnyShapeStyle(Color.primary.opacity(isHovered ? 0.08 : 0.05)),
+            in: Capsule(style: .continuous)
         )
         .overlay {
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .strokeBorder(isRecording ? Color.accentColor : Color.primary.opacity(0.1), lineWidth: isRecording ? 1.5 : 1)
+            Capsule(style: .continuous)
+                .strokeBorder(
+                    isRecording
+                        ? Color.accentColor
+                        : Color.primary.opacity(isHovered ? 0.18 : 0.1),
+                    lineWidth: isRecording ? 1.5 : 0.75
+                )
         }
-        .contentShape(Rectangle())
+        .animation(.snappy(duration: 0.14, extraBounce: 0), value: isRecording)
+        .contentShape(Capsule())
         .onTapGesture {
             session.toggle(action)
         }

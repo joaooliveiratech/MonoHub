@@ -20,6 +20,9 @@ final class ModifierDragManager: NSObject {
         let mode: Mode
         let startPoint: CGPoint
         let startFrame: CGRect
+        let enhancedUIPID: pid_t
+        let hadEnhancedUI: Bool
+        var lastAppliedFrame: CGRect
         var pendingFrame: CGRect?
     }
 
@@ -162,16 +165,29 @@ final class ModifierDragManager: NSObject {
 
         let windows = WindowManager.shared
         guard let window = windows.window(at: point),
-              windows.isManageable(window),
-              let frame = windows.frame(of: window) else { return false }
+              let inspection = windows.inspectWindow(window),
+              !inspection.isFullScreen else { return false }
 
+        let frame = inspection.frame
         let mode: Mode = isResize
             ? .resize(anchorLeft: point.x < frame.midX, anchorTop: point.y < frame.midY)
             : .move
-        windows.bringToFront(window)
-        session = Session(window: window, mode: mode, startPoint: point, startFrame: frame)
+        windows.bringToFront(window, pid: inspection.pid)
+        let enhanced = windows.suspendEnhancedUserInterface(for: window)
+        session = Session(
+            window: window,
+            mode: mode,
+            startPoint: point,
+            startFrame: frame,
+            enhancedUIPID: enhanced.pid,
+            hadEnhancedUI: enhanced.wasEnabled,
+            lastAppliedFrame: frame
+        )
 
-        let link = (NSScreen.main ?? NSScreen.screens.first)?.displayLink(target: self, selector: #selector(displayLinkFired))
+        let targetScreen = screen(containingQuartzPoint: point, primaryHeight: windows.primaryScreenHeight)
+            ?? NSScreen.main
+            ?? NSScreen.screens.first
+        let link = targetScreen?.displayLink(target: self, selector: #selector(displayLinkFired))
         link?.isPaused = true
         link?.add(to: .main, forMode: .common)
         displayLink = link
@@ -179,13 +195,18 @@ final class ModifierDragManager: NSObject {
         return true
     }
 
+    private func screen(containingQuartzPoint point: CGPoint, primaryHeight: CGFloat) -> NSScreen? {
+        let cocoaPoint = CGPoint(x: point.x, y: primaryHeight - point.y)
+        return NSScreen.screens.first { $0.frame.contains(cocoaPoint) }
+    }
+
     private func endSession() {
         trackingTap?.setEnabled(false)
         displayLink?.invalidate()
         displayLink = nil
-        let hadSession = session != nil
-        session = nil
-        if hadSession {
+        if let active = session {
+            WindowManager.shared.restoreEnhancedUserInterface(pid: active.enhancedUIPID, wasEnabled: active.hadEnhancedUI)
+            session = nil
             updateArming(for: NSEvent.modifierFlags)
         }
     }
@@ -201,6 +222,8 @@ final class ModifierDragManager: NSObject {
     private func applyPendingFrame() {
         guard let session, let frame = session.pendingFrame else { return }
         self.session?.pendingFrame = nil
+        guard !frame.isApproximatelyEqual(to: session.lastAppliedFrame, tolerance: 0.5) else { return }
+        self.session?.lastAppliedFrame = frame
         switch session.mode {
         case .move:
             WindowManager.shared.move(session.window, to: frame.origin)

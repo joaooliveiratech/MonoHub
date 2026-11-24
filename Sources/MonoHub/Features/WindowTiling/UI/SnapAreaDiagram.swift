@@ -6,27 +6,66 @@ struct SnapAreaDiagram: View {
     let bottomEdge: BottomEdgeBehavior
 
     @State private var hoveredArea: SnapArea?
+    @State private var referenceScreenWidth: CGFloat = NSScreen.main?.frame.width ?? 1728
 
-    private let menuBarHeight: CGFloat = 10
+    private let menuBarHeight: CGFloat = 11
     private let hoverThreshold: CGFloat = 22
 
     var body: some View {
         GeometryReader { proxy in
             let layout = ScreenLayout(
                 bounds: CGRect(origin: .zero, size: proxy.size),
-                visibleBounds: CGRect(x: 0, y: menuBarHeight, width: proxy.size.width, height: proxy.size.height - menuBarHeight)
+                visibleBounds: CGRect(
+                    x: 0,
+                    y: menuBarHeight + 4,
+                    width: proxy.size.width,
+                    height: max(60, proxy.size.height - menuBarHeight - 4)
+                )
             )
 
             ZStack(alignment: .topLeading) {
+                // Adaptive macOS 27 desktop backdrop
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                Color.accentColor.opacity(0.11),
+                                Color.indigo.opacity(0.08),
+                                Color.primary.opacity(0.04)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
 
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(Color(NSColor.windowBackgroundColor).opacity(0.8))
+                // macOS 27 translucent floating menu bar silhouette
+                HStack(spacing: 4) {
+                    Circle().fill(Color.primary.opacity(0.22)).frame(width: 4, height: 4)
+                    Capsule().fill(Color.primary.opacity(0.16)).frame(width: 24, height: 3.5)
+                    Spacer()
+                    Capsule().fill(Color.primary.opacity(0.16)).frame(width: 18, height: 3.5)
+                    Circle().fill(Color.primary.opacity(0.22)).frame(width: 4, height: 4)
+                }
+                .padding(.horizontal, 8)
+                .frame(height: menuBarHeight)
+                .background(.ultraThinMaterial, in: Capsule())
+                .padding(.horizontal, 6)
+                .padding(.top, 4)
 
-                RoundedRectangle(cornerRadius: 2, style: .continuous)
-                    .fill(Color.primary.opacity(0.12))
-                    .frame(height: menuBarHeight)
-                    .padding(.horizontal, 4)
-                    .padding(.top, 4)
+                // Subtle floating dock pill at bottom center
+                VStack {
+                    Spacer()
+                    HStack {
+                        Spacer()
+                        Capsule()
+                            .fill(.ultraThinMaterial)
+                            .overlay(Capsule().strokeBorder(Color.white.opacity(0.2), lineWidth: 0.5))
+                            .frame(width: 78, height: 6)
+                        Spacer()
+                    }
+                    .padding(.bottom, 5)
+                }
+                .allowsHitTesting(false)
 
                 if let hoveredArea {
                     previewTile(for: hoveredArea, in: layout, canvasWidth: proxy.size.width)
@@ -42,9 +81,9 @@ struct SnapAreaDiagram: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             }
-            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
                     .strokeBorder(Color.primary.opacity(0.12), lineWidth: 1)
             )
             .contentShape(Rectangle())
@@ -60,18 +99,21 @@ struct SnapAreaDiagram: View {
                 }
             }
         }
-        .frame(height: 180)
-        .animation(.snappy(duration: 0.2), value: hoveredArea)
+        .frame(height: 186)
+        .animation(.snappy(duration: 0.2, extraBounce: 0), value: hoveredArea)
+        .onAppear {
+            referenceScreenWidth = NSScreen.main?.frame.width ?? 1728
+        }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(localized("Snap areas preview"))
         .accessibilityValue(hoveredArea?.action.displayName ?? localized("None"))
     }
 
     private func previewTile(for area: SnapArea, in layout: ScreenLayout, canvasWidth: CGFloat) -> some View {
-        let scale = canvasWidth / max(1, NSScreen.main?.frame.width ?? canvasWidth)
+        let scale = canvasWidth / max(1, referenceScreenWidth)
         var scaledOptions = options
-        scaledOptions.margin = max(3, options.margin * scale)
-        scaledOptions.gap = max(3, options.gap * scale)
+        scaledOptions.margin = max(4, options.margin * scale)
+        scaledOptions.gap = max(4, options.gap * scale)
         let rect = TileCalculation.calculate(
             action: area.action,
             screen: layout,
@@ -79,15 +121,28 @@ struct SnapAreaDiagram: View {
             options: scaledOptions
         )
 
-        return RoundedRectangle(cornerRadius: 6, style: .continuous)
-            .fill(Color.accentColor.opacity(0.25))
-            .strokeBorder(Color.accentColor, lineWidth: 1.5)
-            .overlay(
+        let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
+        return ZStack {
+            shape
+                .fill(Color.accentColor.opacity(0.18))
+                .glassEffect(.clear, in: shape)
+                .overlay(
+                    shape.strokeBorder(Color.accentColor.opacity(0.75), lineWidth: 1.5)
+                )
+
+            HStack(spacing: 5) {
+                Image(systemName: area.action.sfSymbol)
+                    .font(.system(size: 11, weight: .semibold))
                 Text(area.action.displayName)
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(.primary)
-            )
-            .frame(width: rect.width, height: rect.height)
-            .offset(x: rect.minX, y: rect.minY)
+                    .lineLimit(1)
+            }
+            .foregroundStyle(.primary)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 4)
+            .glassEffect(.regular, in: Capsule())
+        }
+        .frame(width: max(24, rect.width), height: max(24, rect.height))
+        .offset(x: rect.minX, y: rect.minY)
     }
 }

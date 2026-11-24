@@ -26,12 +26,14 @@ enum TilingFeature: FeatureModule {
         SnapManager.shared.stop()
         ModifierDragManager.shared.stop()
         SnapPreviewPanel.release()
+        FocusQueuePanel.release()
         TileStatusItemController.shared.setVisible(false)
         TileAccessibilityManager.shared.stopObserving()
         WindowManager.shared.stopObserving()
     }
 
     private static func applyPreferences() {
+        WindowManager.shared.refreshFocusObserverIfNeeded()
         HotkeyManager.shared.reload()
         SnapManager.shared.reload()
         ModifierDragManager.shared.reload()

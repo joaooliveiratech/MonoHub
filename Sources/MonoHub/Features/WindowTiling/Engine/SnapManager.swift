@@ -6,11 +6,23 @@ import Foundation
 final class SnapManager {
     static let shared = SnapManager()
 
+    private struct DragSessionContext {
+        let window: AXUIElement
+        let layouts: [ScreenLayout]
+        let options: TileOptions
+        let primaryScreenHeight: CGFloat
+        let snapThreshold: CGFloat
+        let bottomEdge: BottomEdgeBehavior
+        let isSnapEnabled: Bool
+        let isSnapPreviewEnabled: Bool
+        let isSnapHapticEnabled: Bool
+    }
+
     private enum DragState {
         case idle
         case pressed(origin: CGPoint)
         case candidate(window: AXUIElement, initialFrame: CGRect, origin: CGPoint, lastSample: CGPoint)
-        case movingWindow(window: AXUIElement, layouts: [ScreenLayout])
+        case movingWindow(DragSessionContext)
         case ignored
     }
 
@@ -19,10 +31,10 @@ final class SnapManager {
         let screen: ScreenLayout
     }
 
-    private let moveConfirmationDistance: CGFloat = 8
-    private let maxUnconfirmedDragDistance: CGFloat = 24
-    private let sampleStride: CGFloat = 4
-    private let evaluationStride: CGFloat = 3
+    private let moveConfirmationDistanceSquared: CGFloat = 8 * 8
+    private let maxUnconfirmedDragDistanceSquared: CGFloat = 24 * 24
+    private let sampleStrideSquared: CGFloat = 4 * 4
+    private let evaluationStrideSquared: CGFloat = 3 * 3
 
     private var pressMonitor: Any?
     private var dragMonitor: Any?
@@ -73,8 +85,8 @@ final class SnapManager {
             handleDrag(to: mouseLocation())
             if case .ignored = state { endPress() }
         case .leftMouseUp:
-            if case .movingWindow(let window, _) = state, let snapTarget {
-                WindowManager.shared.perform(action: snapTarget.action, on: window)
+            if case .movingWindow(let context) = state, let snapTarget {
+                WindowManager.shared.perform(action: snapTarget.action, on: context.window)
             }
             endPress()
         default:
@@ -95,14 +107,15 @@ final class SnapManager {
             state = .pressed(origin: point)
 
         case .pressed(let origin):
-            guard point.distance(to: origin) >= moveConfirmationDistance else { return }
+            guard point.distanceSquared(to: origin) >= moveConfirmationDistanceSquared else { return }
             guard let window = windows.window(at: origin),
-                  windows.isManageable(window),
-                  let frame = windows.frame(of: window) else {
+                  let inspection = windows.inspectWindow(window),
+                  !inspection.isFullScreen else {
                 state = .ignored
                 return
             }
 
+            let frame = inspection.frame
             let isNearTitlebar = origin.y >= frame.minY - 4 && origin.y <= frame.minY + 56
             guard isNearTitlebar else {
                 state = .ignored
@@ -111,46 +124,58 @@ final class SnapManager {
             state = .candidate(window: window, initialFrame: frame, origin: origin, lastSample: origin)
 
         case .candidate(let window, let initialFrame, let origin, let lastSample):
-            let distance = point.distance(to: origin)
-            guard distance >= moveConfirmationDistance, point.distance(to: lastSample) >= sampleStride else { return }
+            let distanceSq = point.distanceSquared(to: origin)
+            guard distanceSq >= moveConfirmationDistanceSquared,
+                  point.distanceSquared(to: lastSample) >= sampleStrideSquared else { return }
             guard let frame = windows.frame(of: window), frame.size.equalTo(initialFrame.size) else {
                 state = .ignored
                 return
             }
             if !frame.origin.equalTo(initialFrame.origin) {
-                state = .movingWindow(window: window, layouts: windows.screenLayouts())
-                if TilePreferencesManager.shared.restoresSizeOnDrag {
+                let prefs = TilePreferencesManager.shared
+                let context = DragSessionContext(
+                    window: window,
+                    layouts: windows.screenLayouts(),
+                    options: prefs.tileOptions,
+                    primaryScreenHeight: windows.primaryScreenHeight,
+                    snapThreshold: prefs.snapThreshold,
+                    bottomEdge: prefs.bottomEdgeBehavior,
+                    isSnapEnabled: prefs.isSnapEnabled,
+                    isSnapPreviewEnabled: prefs.isSnapPreviewEnabled,
+                    isSnapHapticEnabled: prefs.isSnapHapticEnabled
+                )
+                state = .movingWindow(context)
+                if prefs.restoresSizeOnDrag {
                     windows.restoreSizeIfTiled(window, initialFrame: initialFrame, cursor: point)
                 }
-                updateSnapTarget(at: point)
-            } else if distance > maxUnconfirmedDragDistance {
+                updateSnapTarget(at: point, context: context)
+            } else if distanceSq > maxUnconfirmedDragDistanceSquared {
                 state = .ignored
             } else {
                 state = .candidate(window: window, initialFrame: initialFrame, origin: origin, lastSample: point)
             }
 
-        case .movingWindow:
-            updateSnapTarget(at: point)
+        case .movingWindow(let context):
+            updateSnapTarget(at: point, context: context)
 
         case .ignored:
             break
         }
     }
 
-    private func updateSnapTarget(at point: CGPoint) {
-        let prefs = TilePreferencesManager.shared
-        guard prefs.isSnapEnabled, case .movingWindow(_, let layouts) = state else { return }
-        if let lastEvaluatedPoint, point.distance(to: lastEvaluatedPoint) < evaluationStride {
+    private func updateSnapTarget(at point: CGPoint, context: DragSessionContext) {
+        guard context.isSnapEnabled else { return }
+        if let lastEvaluatedPoint, point.distanceSquared(to: lastEvaluatedPoint) < evaluationStrideSquared {
             return
         }
         lastEvaluatedPoint = point
 
-        guard let screen = ScreenLayout.screen(containing: point, in: layouts),
+        guard let screen = ScreenLayout.screen(containing: point, in: context.layouts),
               let area = SnapArea.evaluate(
                   mousePoint: point,
                   screen: screen,
-                  threshold: prefs.snapThreshold,
-                  bottomEdge: prefs.bottomEdgeBehavior
+                  threshold: context.snapThreshold,
+                  bottomEdge: context.bottomEdge
               ) else {
             clearSnapTarget()
             return
@@ -158,19 +183,24 @@ final class SnapManager {
 
         let target = SnapTarget(action: area.action, screen: screen)
         guard target != snapTarget else { return }
-        if target.action != snapTarget?.action && prefs.isSnapHapticEnabled {
+        if target.action != snapTarget?.action && context.isSnapHapticEnabled {
             NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
         }
         snapTarget = target
 
-        guard prefs.isSnapPreviewEnabled else { return }
+        guard context.isSnapPreviewEnabled else { return }
         let frame = TileCalculation.calculate(
             action: area.action,
             screen: screen,
             currentFrame: .zero,
-            options: prefs.tileOptions
+            options: context.options
         )
-        SnapPreviewPanel.shared.show(frame, on: screen, primaryScreenHeight: WindowManager.shared.primaryScreenHeight)
+        SnapPreviewPanel.shared.show(
+            frame,
+            action: area.action,
+            on: screen,
+            primaryScreenHeight: context.primaryScreenHeight
+        )
     }
 
     private func clearSnapTarget() {

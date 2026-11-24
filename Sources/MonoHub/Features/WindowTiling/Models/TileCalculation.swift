@@ -105,7 +105,9 @@ enum TileCalculation {
             let y = usable.minY + (usable.height - targetH) / 2.0
             return CGRect(x: x, y: y, width: targetW, height: targetH)
 
-        case .restore, .nextDisplay, .previousDisplay, .focusLeft, .focusRight, .focusUp, .focusDown:
+        case .restore, .nextDisplay, .previousDisplay,
+             .focusLeft, .focusRight, .focusUp, .focusDown,
+             .focusLastWindow, .focusQueueNext, .focusQueuePrevious, .swapWithLastWindow:
             return currentFrame
 
         case .moveLeft:

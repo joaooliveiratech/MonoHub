@@ -22,7 +22,7 @@ enum ActionCategory: String, CaseIterable, Sendable {
         case .sizeAndPosition: return "Tamanho & Posição"
         case .displays: return "Monitores & Telas"
         case .nudgeAndResize: return "Ajustar & Redimensionar"
-        case .focus: return "Foco Direcional"
+        case .focus: return "Foco & Alternância"
         }
     }
 
@@ -87,6 +87,10 @@ enum WindowAction: String, CaseIterable, Identifiable, Codable, Sendable {
     case focusRight
     case focusUp
     case focusDown
+    case focusLastWindow
+    case focusQueueNext
+    case focusQueuePrevious
+    case swapWithLastWindow
 
     var id: String { rawValue }
 
@@ -115,6 +119,16 @@ enum WindowAction: String, CaseIterable, Identifiable, Codable, Sendable {
         case .focusUp: return .up
         case .focusDown: return .down
         default: return nil
+        }
+    }
+
+    var isFocusOrSwitchAction: Bool {
+        switch self {
+        case .focusLeft, .focusRight, .focusUp, .focusDown,
+             .focusLastWindow, .focusQueueNext, .focusQueuePrevious, .swapWithLastWindow:
+            return true
+        default:
+            return false
         }
     }
 
@@ -161,6 +175,10 @@ enum WindowAction: String, CaseIterable, Identifiable, Codable, Sendable {
         case .focusRight: return "Focar Janela à Direita"
         case .focusUp: return "Focar Janela Acima"
         case .focusDown: return "Focar Janela Abaixo"
+        case .focusLastWindow: return "Alternar Última Janela"
+        case .focusQueueNext: return "Próxima na Fila de Foco"
+        case .focusQueuePrevious: return "Anterior na Fila de Foco"
+        case .swapWithLastWindow: return "Trocar Posição com Última Janela"
         }
     }
 
@@ -203,6 +221,10 @@ enum WindowAction: String, CaseIterable, Identifiable, Codable, Sendable {
         case .focusRight: return "Focus Right"
         case .focusUp: return "Focus Up"
         case .focusDown: return "Focus Down"
+        case .focusLastWindow: return "Switch to Last Window"
+        case .focusQueueNext: return "Next in Focus Queue"
+        case .focusQueuePrevious: return "Previous in Focus Queue"
+        case .swapWithLastWindow: return "Swap with Last Window"
         }
     }
 
@@ -220,7 +242,8 @@ enum WindowAction: String, CaseIterable, Identifiable, Codable, Sendable {
             return .displays
         case .moveLeft, .moveRight, .moveUp, .moveDown, .makeLarger, .makeSmaller:
             return .nudgeAndResize
-        case .focusLeft, .focusRight, .focusUp, .focusDown:
+        case .focusLeft, .focusRight, .focusUp, .focusDown,
+             .focusLastWindow, .focusQueueNext, .focusQueuePrevious, .swapWithLastWindow:
             return .focus
         }
     }
@@ -264,6 +287,10 @@ enum WindowAction: String, CaseIterable, Identifiable, Codable, Sendable {
         case .focusRight: return "arrow.right.circle"
         case .focusUp: return "arrow.up.circle"
         case .focusDown: return "arrow.down.circle"
+        case .focusLastWindow: return "arrow.left.arrow.right.circle"
+        case .focusQueueNext: return "rectangle.stack.badge.play"
+        case .focusQueuePrevious: return "arrow.uturn.left.circle"
+        case .swapWithLastWindow: return "rectangle.2.swap"
         }
     }
 
@@ -303,6 +330,10 @@ enum WindowAction: String, CaseIterable, Identifiable, Codable, Sendable {
         case .focusRight: return ShortcutKey(kVK_RightArrow, .controlOptionCommand)
         case .focusUp: return ShortcutKey(kVK_UpArrow, .controlOptionCommand)
         case .focusDown: return ShortcutKey(kVK_DownArrow, .controlOptionCommand)
+        case .focusLastWindow: return ShortcutKey(kVK_Tab, .controlOptionCommand)
+        case .focusQueueNext: return ShortcutKey(kVK_ANSI_RightBracket, .controlOptionCommand)
+        case .focusQueuePrevious: return ShortcutKey(kVK_ANSI_LeftBracket, .controlOptionCommand)
+        case .swapWithLastWindow: return ShortcutKey(kVK_Return, .controlOptionCommand)
         }
     }
 }

@@ -101,6 +101,12 @@ extension CGPoint {
     func distance(to other: CGPoint) -> CGFloat {
         hypot(x - other.x, y - other.y)
     }
+
+    func distanceSquared(to other: CGPoint) -> CGFloat {
+        let dx = x - other.x
+        let dy = y - other.y
+        return dx * dx + dy * dy
+    }
 }
 
 enum SnapArea: CaseIterable, Sendable, Hashable {

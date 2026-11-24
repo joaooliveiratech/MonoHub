@@ -68,6 +68,55 @@ enum DragModifier: String, CaseIterable, Sendable {
     }
 }
 
+enum FocusScope: String, CaseIterable, Sendable {
+    case allDisplays
+    case currentDisplay
+
+    var title: String {
+        Localization.language == .english ? englishTitle : portugueseTitle
+    }
+
+    var portugueseTitle: String {
+        switch self {
+        case .allDisplays: return "Todos os Monitores"
+        case .currentDisplay: return "Monitor Atual"
+        }
+    }
+
+    var englishTitle: String {
+        switch self {
+        case .allDisplays: return "All Displays"
+        case .currentDisplay: return "Current Display"
+        }
+    }
+}
+
+enum DirectionalFocusFallback: String, CaseIterable, Sendable {
+    case lastWindow
+    case wrapAround
+    case none
+
+    var title: String {
+        Localization.language == .english ? englishTitle : portugueseTitle
+    }
+
+    var portugueseTitle: String {
+        switch self {
+        case .lastWindow: return "Alternar para última janela"
+        case .wrapAround: return "Circular na borda oposta"
+        case .none: return "Parar na borda"
+        }
+    }
+
+    var englishTitle: String {
+        switch self {
+        case .lastWindow: return "Switch to last window"
+        case .wrapAround: return "Wrap to opposite edge"
+        case .none: return "Stop at edge"
+        }
+    }
+}
+
 struct TileOptions: Sendable, Equatable {
     var margin: CGFloat = 0
     var gap: CGFloat = 0

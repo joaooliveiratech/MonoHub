@@ -4,6 +4,7 @@ import UniformTypeIdentifiers
 
 enum TilingSettingsSectionID: String, CaseIterable, Identifiable {
     case general
+    case smartFocus
     case snap
     case modifierDrag
     case spacing
@@ -44,6 +45,18 @@ struct WindowTilingView: View {
                         isExpanded: $expandedSections.contains(.general)
                     ) {
                         TilingGeneralSection()
+                    }
+
+                    HubAccordionSection(
+                        title: localized("Smart focus & queue"),
+                        subtitle: localized("Switch to the last window, step through the MRU queue, and navigate spatially."),
+                        badgeText: prefs.focusScope.title,
+                        badgeColor: .mint,
+                        systemImage: "rectangle.stack.badge.play",
+                        tint: .mint,
+                        isExpanded: $expandedSections.contains(.smartFocus)
+                    ) {
+                        TilingSmartFocusSection()
                     }
 
                     HubAccordionSection(
@@ -97,7 +110,7 @@ struct WindowTilingView: View {
                     HubAccordionSection(
                         title: localized("Keyboard shortcuts"),
                         subtitle: localized("Click a shortcut and press the new combination. Esc cancels, Delete clears."),
-                        badgeText: "\(WindowAction.allCases.filter { prefs.shortcut(for: $0) != nil }.count)",
+                        badgeText: "\(prefs.activeShortcutCount)",
                         badgeColor: .pink,
                         systemImage: "keyboard.fill",
                         tint: .pink,
@@ -133,15 +146,7 @@ struct WindowTilingView: View {
                     VStack(alignment: .leading, spacing: 12) {
                         TilingShortcutSections(query: trimmedQuery)
                     }
-                    .padding(16)
-                    .background(
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .fill(Color(nsColor: .controlBackgroundColor))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                    .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
-                            )
-                    )
+                    .hubCard(cornerRadius: 12, padding: 16)
                 }
             }
             .padding(20)
@@ -157,6 +162,9 @@ struct WindowTilingView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             accessibility.refresh()
+            if expandedSections.contains(.smartFocus) {
+                WindowManager.shared.refreshFocusQueuePreview()
+            }
         }
         .onDisappear {
             session.cancel()
@@ -196,7 +204,7 @@ private struct TilingPermissionsCard: View {
         .padding(.vertical, 12)
         .background(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color(nsColor: .controlBackgroundColor))
+                .fill(.background.secondary)
                 .overlay(
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
                         .strokeBorder(
@@ -216,14 +224,6 @@ private struct TilingGeneralSection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HubToggleRow(
-                title: localized("Move to adjacent display when repeating at edge"),
-                subtitle: localized("Pressing Left/Right Half or Move again (e.g. ⌥⇧H / ⌥⇧L) moves the window to the next monitor in that direction."),
-                isOn: $prefs.moveToAdjacentDisplayOnEdge
-            )
-
-            Divider()
-
-            HubToggleRow(
                 title: localized("Menu bar icon"),
                 isOn: $prefs.showMenuBarIcon
             )
@@ -234,20 +234,256 @@ private struct TilingGeneralSection: View {
                 Text(localized("Test on this window"))
                     .font(.system(size: 12.5))
                 Spacer()
-                ControlGroup {
-                    ForEach(Self.quickActions) { action in
-                        Button {
-                            WindowManager.shared.perform(action: action)
-                        } label: {
-                            Label(action.displayName, systemImage: action.sfSymbol)
+                GlassEffectContainer(spacing: 6) {
+                    HStack(spacing: 6) {
+                        ForEach(Self.quickActions) { action in
+                            Button {
+                                WindowManager.shared.perform(action: action)
+                            } label: {
+                                Image(systemName: action.sfSymbol)
+                                    .font(.system(size: 12, weight: .semibold))
+                                    .frame(width: 24, height: 22)
+                            }
+                            .buttonStyle(.glass)
+                            .help(action.displayName)
                         }
-                        .help(action.displayName)
                     }
                 }
-                .labelStyle(.iconOnly)
-                .fixedSize()
             }
         }
+    }
+}
+
+private struct TilingSmartFocusSection: View {
+    @Bindable private var prefs = TilePreferencesManager.shared
+    private let windowManager = WindowManager.shared
+
+    private static let focusQuickActions: [WindowAction] = [
+        .focusLastWindow,
+        .focusQueueNext,
+        .swapWithLastWindow
+    ]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            // Live MRU Focus Queue preview card
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 8) {
+                    Label(localized("Active focus queue"), systemImage: "rectangle.stack")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.primary)
+
+                    StatusBadge(
+                        "\(windowManager.focusQueuePreview.count)",
+                        color: .mint
+                    )
+
+                    Spacer()
+
+                    Button {
+                        windowManager.refreshFocusQueuePreview()
+                    } label: {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 11, weight: .semibold))
+                    }
+                    .buttonStyle(.borderless)
+                    .help(localized("Refresh focus queue"))
+                }
+
+                if windowManager.focusQueuePreview.isEmpty {
+                    Text(localized("Switch between windows to populate the MRU focus queue."))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .padding(.vertical, 6)
+                } else {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(Array(windowManager.focusQueuePreview.prefix(8).enumerated()), id: \.element.windowID) { index, item in
+                                Button {
+                                    windowManager.focusWindowFromPreview(item)
+                                } label: {
+                                    FocusQueuePreviewChip(ref: item, rank: index)
+                                }
+                                .buttonStyle(.plain)
+                                .help(item.displayLabel)
+                            }
+                        }
+                        .padding(.vertical, 2)
+                    }
+                }
+
+                GlassEffectContainer(spacing: 8) {
+                    HStack(spacing: 8) {
+                        ForEach(Self.focusQuickActions) { action in
+                            Button {
+                                WindowManager.shared.perform(action: action)
+                            } label: {
+                                HStack(spacing: 5) {
+                                    Image(systemName: action.sfSymbol)
+                                        .font(.system(size: 11, weight: .semibold))
+                                    Text(action.displayName)
+                                        .font(.system(size: 11.5, weight: .medium))
+                                        .lineLimit(1)
+                                    if let shortcut = prefs.shortcut(for: action) {
+                                        Text(shortcut.displayString)
+                                            .font(.system(size: 10, design: .monospaced))
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+                                .padding(.horizontal, 4)
+                                .padding(.vertical, 2)
+                            }
+                            .buttonStyle(.glass)
+                            .controlSize(.small)
+                        }
+                        Spacer(minLength: 0)
+                    }
+                }
+            }
+            .padding(12)
+            .background(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(Color.primary.opacity(0.03))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .strokeBorder(Color.primary.opacity(0.07), lineWidth: 0.75)
+                    )
+            )
+
+            Divider()
+
+            HStack {
+                VStack(alignment: .leading, spacing: 1.5) {
+                    Text(localized("Focus queue scope"))
+                        .font(.system(size: 12.5))
+                    Text(localized("Choose whether MRU switching and directional focus stay on the active monitor or span all displays."))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 12)
+                Picker("", selection: $prefs.focusScope) {
+                    ForEach(FocusScope.allCases, id: \.self) { scope in
+                        Text(scope.title).tag(scope)
+                    }
+                }
+                .labelsHidden()
+                .frame(width: 210)
+            }
+
+            Divider()
+
+            HStack {
+                VStack(alignment: .leading, spacing: 1.5) {
+                    Text(localized("When no window exists in direction"))
+                        .font(.system(size: 12.5))
+                    Text(localized("Directional focus also breaks ties between stacked windows using MRU recency."))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 12)
+                Picker("", selection: $prefs.directionalFocusFallback) {
+                    ForEach(DirectionalFocusFallback.allCases, id: \.self) { fallback in
+                        Text(fallback.title).tag(fallback)
+                    }
+                }
+                .labelsHidden()
+                .frame(width: 230)
+            }
+
+            Divider()
+
+            HubToggleRow(
+                title: localized("Show Liquid Glass focus HUD"),
+                subtitle: localized("Displays a brief floating queue pill when alternating or stepping through windows."),
+                isOn: $prefs.showFocusHUD
+            )
+
+            Divider()
+
+            HubToggleRow(
+                title: localized("Move cursor to focused window"),
+                subtitle: localized("Centers the pointer on the target window after keyboard focus switches."),
+                isOn: $prefs.warpCursorOnFocus
+            )
+        }
+        .onAppear {
+            windowManager.refreshFocusQueuePreview()
+        }
+        .onChange(of: prefs.focusScope) { _, _ in
+            windowManager.refreshFocusQueuePreview()
+        }
+    }
+}
+
+private struct FocusQueuePreviewChip: View {
+    let ref: FocusWindowRef
+    let rank: Int
+
+    @State private var isHovered = false
+
+    private var roleBadge: String? {
+        switch rank {
+        case 0: return localized("Current")
+        case 1: return localized("Last")
+        default: return "#\(rank + 1)"
+        }
+    }
+
+    private var badgeTint: Color {
+        switch rank {
+        case 0: return .accentColor
+        case 1: return .mint
+        default: return .secondary
+        }
+    }
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
+        HStack(spacing: 8) {
+            FocusAppIconView(pid: ref.pid, size: 22)
+
+            VStack(alignment: .leading, spacing: 1.5) {
+                HStack(spacing: 5) {
+                    Text(ref.appName)
+                        .font(.system(size: 11.5, weight: .semibold))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+
+                    if let roleBadge {
+                        Text(roleBadge)
+                            .font(.system(size: 9.5, weight: .semibold, design: .rounded))
+                            .foregroundStyle(badgeTint)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 1)
+                            .background(Capsule().fill(badgeTint.opacity(0.14)))
+                    }
+                }
+
+                if !ref.title.isEmpty && ref.title != ref.appName {
+                    Text(ref.title)
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .frame(maxWidth: 190, alignment: .leading)
+        .background(
+            shape.fill(
+                rank == 0
+                    ? Color.accentColor.opacity(0.11)
+                    : Color.primary.opacity(isHovered ? 0.08 : 0.04)
+            )
+        )
+        .overlay(
+            shape.strokeBorder(
+                rank == 0 ? Color.accentColor.opacity(0.42) : Color.primary.opacity(isHovered ? 0.16 : 0.08),
+                lineWidth: 0.75
+            )
+        )
+        .onHover { isHovered = $0 }
     }
 }
 
@@ -300,17 +536,16 @@ private struct TilingSnapSection: View {
                     isOn: $prefs.isSnapHapticEnabled
                 )
 
-                HStack {
-                    Text(localized("Edge sensitivity"))
-                        .font(.system(size: 12.5))
-                    Spacer()
-                    ValueSlider(
-                        value: $prefs.snapThreshold,
-                        range: TilePreferencesManager.snapThresholdRange,
-                        step: 5,
-                        unit: "pt"
-                    )
-                }
+                HubSliderRow(
+                    title: localized("Edge sensitivity"),
+                    value: Binding(
+                        get: { Double(prefs.snapThreshold) },
+                        set: { prefs.snapThreshold = CGFloat($0) }
+                    ),
+                    range: Double(TilePreferencesManager.snapThresholdRange.lowerBound)...Double(TilePreferencesManager.snapThresholdRange.upperBound),
+                    step: 5,
+                    format: { "\(Int($0)) pt" }
+                )
 
                 HStack {
                     Text(localized("Bottom edge"))
@@ -382,19 +617,27 @@ private struct TilingSpacingSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text(localized("Screen edge margin"))
-                    .font(.system(size: 12.5))
-                Spacer()
-                ValueSlider(value: $prefs.outerMargin, range: TilePreferencesManager.marginRange, step: 2, unit: "pt")
-            }
+            HubSliderRow(
+                title: localized("Screen edge margin"),
+                value: Binding(
+                    get: { Double(prefs.outerMargin) },
+                    set: { prefs.outerMargin = CGFloat($0) }
+                ),
+                range: Double(TilePreferencesManager.marginRange.lowerBound)...Double(TilePreferencesManager.marginRange.upperBound),
+                step: 2,
+                format: { "\(Int($0)) pt" }
+            )
             Divider()
-            HStack {
-                Text(localized("Gap between windows"))
-                    .font(.system(size: 12.5))
-                Spacer()
-                ValueSlider(value: $prefs.windowGap, range: TilePreferencesManager.gapRange, step: 2, unit: "pt")
-            }
+            HubSliderRow(
+                title: localized("Gap between windows"),
+                value: Binding(
+                    get: { Double(prefs.windowGap) },
+                    set: { prefs.windowGap = CGFloat($0) }
+                ),
+                range: Double(TilePreferencesManager.gapRange.lowerBound)...Double(TilePreferencesManager.gapRange.upperBound),
+                step: 2,
+                format: { "\(Int($0)) pt" }
+            )
             Divider()
             HubToggleRow(
                 title: localized("Keep margin when maximizing"),
@@ -428,19 +671,27 @@ private struct TilingRepeatSection: View {
                 .frame(width: 240)
             }
             Divider()
-            HStack {
-                Text(localized("Move and resize step"))
-                    .font(.system(size: 12.5))
-                Spacer()
-                ValueSlider(value: $prefs.actionStep, range: TilePreferencesManager.stepRange, step: 10, unit: "pt")
-            }
+            HubSliderRow(
+                title: localized("Move and resize step"),
+                value: Binding(
+                    get: { Double(prefs.actionStep) },
+                    set: { prefs.actionStep = CGFloat($0) }
+                ),
+                range: Double(TilePreferencesManager.stepRange.lowerBound)...Double(TilePreferencesManager.stepRange.upperBound),
+                step: 10,
+                format: { "\(Int($0)) pt" }
+            )
             Divider()
-            HStack {
-                Text(localized("Almost maximize"))
-                    .font(.system(size: 12.5))
-                Spacer()
-                ValueSlider(value: $prefs.almostMaximizePercent, range: TilePreferencesManager.almostMaximizeRange, step: 5, unit: "%")
-            }
+            HubSliderRow(
+                title: localized("Almost maximize"),
+                value: Binding(
+                    get: { Double(prefs.almostMaximizePercent) },
+                    set: { prefs.almostMaximizePercent = CGFloat($0) }
+                ),
+                range: Double(TilePreferencesManager.almostMaximizeRange.lowerBound)...Double(TilePreferencesManager.almostMaximizeRange.upperBound),
+                step: 5,
+                format: { "\(Int($0))%" }
+            )
         }
     }
 }
@@ -452,7 +703,7 @@ private struct TilingShortcutSections: View {
     private let session = ShortcutRecordingSession.shared
 
     @State private var isConfirmingReset = false
-    @State private var expandedCategories: Set<ActionCategory> = [.halves]
+    @State private var expandedCategories: Set<ActionCategory> = [.halves, .focus]
 
     var body: some View {
         let categories = filteredCategories()
@@ -515,6 +766,10 @@ private struct TilingShortcutSections: View {
                                         .rotationEffect(.degrees(isOpen ? 90 : 0))
                                         .frame(width: 14)
                                 }
+                                Image(systemName: entry.category.sfSymbol)
+                                    .font(.system(size: 11.5, weight: .semibold))
+                                    .foregroundStyle(.secondary)
+                                    .frame(width: 16)
                                 Text(entry.category.title)
                                     .font(.system(size: 12.5, weight: .semibold))
                                     .foregroundStyle(.primary)
@@ -718,31 +973,6 @@ private struct TilingBackupSection: View {
                 SettingsBackup.presentImportPanel(for: prefs)
             }
             .buttonStyle(.bordered)
-        }
-    }
-}
-
-private struct ValueSlider: View {
-    @Binding var value: CGFloat
-    let range: ClosedRange<CGFloat>
-    let step: CGFloat
-    let unit: String
-
-    var body: some View {
-        HStack(spacing: 10) {
-            Slider(value: $value, in: range, step: step)
-                .frame(minWidth: 140, maxWidth: 200)
-            Text(unit == "%" ? "\(Int(value))%" : "\(Int(value)) \(unit)")
-                .font(.system(size: 11.5, weight: .semibold, design: .rounded))
-                .monospacedDigit()
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 7)
-                .padding(.vertical, 2.5)
-                .frame(minWidth: 54, alignment: .center)
-                .background(
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .fill(Color.primary.opacity(0.05))
-                )
         }
     }
 }

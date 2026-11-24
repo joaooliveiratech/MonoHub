@@ -2154,6 +2154,21 @@ nonisolated enum PortugueseStrings {
         "AirPlay": "AirPlay",
         "Virtual": "Virtual",
         "Continuity": "Continuidade",
-        "External": "Externo"
+        "External": "Externo",
+        "Smart focus & queue": "Foco inteligente & fila",
+        "Switch to the last window, step through the MRU queue, and navigate spatially.": "Alterne para a última janela, navegue pela fila MRU e mova o foco direcional.",
+        "Active focus queue": "Fila de foco ativa",
+        "Refresh focus queue": "Atualizar fila de foco",
+        "Switch between windows to populate the MRU focus queue.": "Alterne entre janelas para preencher a fila de foco MRU.",
+        "Focus queue scope": "Escopo da fila de foco",
+        "Choose whether MRU switching and directional focus stay on the active monitor or span all displays.": "Escolha se a alternância MRU e o foco direcional ficam no monitor ativo ou abrangem todos os monitores.",
+        "When no window exists in direction": "Quando não houver janela na direção",
+        "Directional focus also breaks ties between stacked windows using MRU recency.": "O foco direcional também desempata janelas empilhadas pela ordem MRU mais recente.",
+        "Show Liquid Glass focus HUD": "Mostrar HUD de foco em Liquid Glass",
+        "Displays a brief floating queue pill when alternating or stepping through windows.": "Exibe uma pílula flutuante rápida da fila ao alternar ou navegar entre janelas.",
+        "Move cursor to focused window": "Mover cursor para a janela focada",
+        "Centers the pointer on the target window after keyboard focus switches.": "Centraliza o ponteiro na janela de destino após trocar o foco pelo teclado.",
+        "Current": "Atual",
+        "Last": "Última"
     ]
 }
