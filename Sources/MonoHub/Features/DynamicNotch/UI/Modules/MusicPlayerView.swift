@@ -38,7 +38,16 @@ struct MusicPlayerView: View {
             playbackManager.refreshIfStale()
             volumeManager.fetchVolume()
             AudioDeviceManager.shared.refreshDevices()
-            AudioDeviceManager.shared.startMetering(consumer: "MusicPlayerView")
+            if preferences.musicEnableMicLevelMeter {
+                AudioDeviceManager.shared.startMetering(consumer: "MusicPlayerView")
+            }
+        }
+        .onChange(of: preferences.musicEnableMicLevelMeter) { _, enabled in
+            if enabled {
+                AudioDeviceManager.shared.startMetering(consumer: "MusicPlayerView")
+            } else {
+                AudioDeviceManager.shared.stopMetering(consumer: "MusicPlayerView")
+            }
         }
         .onDisappear {
             AudioDeviceManager.shared.stopMetering(consumer: "MusicPlayerView")

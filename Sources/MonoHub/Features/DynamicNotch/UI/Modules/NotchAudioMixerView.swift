@@ -41,24 +41,23 @@ struct NotchAudioMixerView: View {
 
     private var topToolbar: some View {
         HStack(spacing: 8) {
-            HStack(spacing: 3) {
-                subTabButton(
-                    tab: .apps,
-                    title: localized("Per-Application Volume Mixer"),
-                    icon: "slider.horizontal.below.square.and.square.filled",
-                    badgeCount: processMixer.activeSessions.count
-                )
-                subTabButton(
-                    tab: .devices,
-                    title: localized("Default Microphone:"),
-                    icon: deviceManager.isMicrophoneLocked ? "lock.fill" : "mic.fill",
-                    badgeCount: nil
-                )
-            }
-            .padding(2)
-            .background(
-                Capsule()
-                    .fill(Color.white.opacity(0.07))
+            NotchSegmentedControl(
+                options: [
+                    .init(
+                        id: SubTab.apps,
+                        title: localized("App Mixer"),
+                        icon: "slider.horizontal.below.square.and.square.filled",
+                        tint: .orange,
+                        badgeCount: processMixer.activeSessions.count
+                    ),
+                    .init(
+                        id: SubTab.devices,
+                        title: localized("Devices & Mic"),
+                        icon: deviceManager.isMicrophoneLocked ? "lock.fill" : "mic.fill",
+                        tint: .white
+                    )
+                ],
+                selection: $selectedSubTab
             )
 
             Spacer()
@@ -76,7 +75,7 @@ struct NotchAudioMixerView: View {
                             .font(.system(size: 10, weight: .medium))
                             .foregroundStyle(.white.opacity(0.88))
                             .lineLimit(1)
-                            .frame(maxWidth: 110, alignment: .leading)
+                            .truncationMode(.tail)
                         if deviceManager.isMicrophoneLocked {
                             Image(systemName: "lock.fill")
                                 .font(.system(size: 8, weight: .bold))
@@ -109,41 +108,6 @@ struct NotchAudioMixerView: View {
                 .help(localized("Sound & Audio Control"))
             }
         }
-    }
-
-    private func subTabButton(tab: SubTab, title: String, icon: String, badgeCount: Int?) -> some View {
-        let isSelected = selectedSubTab == tab
-        return Button {
-            NotchHaptics.tap()
-            withAnimation(NotchTheme.content) {
-                selectedSubTab = tab
-            }
-        } label: {
-            HStack(spacing: 5) {
-                Image(systemName: icon)
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(isSelected ? Color.orange : Color.white.opacity(0.65))
-                Text(title.replacingOccurrences(of: ":", with: ""))
-                    .font(.system(size: 10.5, weight: isSelected ? .semibold : .medium))
-                    .foregroundStyle(isSelected ? .white : .white.opacity(0.72))
-                    .lineLimit(1)
-                if let badgeCount, badgeCount > 0 {
-                    Text("\(badgeCount)")
-                        .font(.system(size: 9, weight: .bold, design: .rounded).monospacedDigit())
-                        .padding(.horizontal, 4.5)
-                        .padding(.vertical, 1)
-                        .background(Capsule().fill(Color.orange.opacity(0.25)))
-                        .foregroundStyle(Color.orange)
-                }
-            }
-            .padding(.horizontal, 9)
-            .padding(.vertical, 4.5)
-            .background(
-                Capsule()
-                    .fill(isSelected ? Color.white.opacity(0.14) : Color.clear)
-            )
-        }
-        .buttonStyle(.plain)
     }
 
     private var perAppMixerContent: some View {

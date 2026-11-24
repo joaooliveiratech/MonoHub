@@ -2,6 +2,7 @@ import Foundation
 import AppKit
 @preconcurrency import EventKit
 import Observation
+import Synchronization
 
 nonisolated struct UncheckedEventStore: @unchecked Sendable {
     let store: EKEventStore
@@ -244,11 +245,16 @@ final class CalendarManager {
                lower.contains("around.co/")
     }
 
+    nonisolated private static let linkDetector = Mutex<NSDataDetector?>(
+        try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue)
+    )
+
     nonisolated private static func findAllURLs(in string: String) -> [URL] {
-        guard let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue) else {
-            return []
+        guard !string.isEmpty else { return [] }
+        return linkDetector.withLock { detector in
+            guard let detector else { return [] }
+            let matches = detector.matches(in: string, options: [], range: NSRange(location: 0, length: string.utf16.count))
+            return matches.compactMap { $0.url }
         }
-        let matches = detector.matches(in: string, options: [], range: NSRange(location: 0, length: string.utf16.count))
-        return matches.compactMap { $0.url }
     }
 }

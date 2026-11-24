@@ -51,6 +51,7 @@ struct BluetoothView: View {
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(30))
                 guard !Task.isCancelled else { break }
+                guard !NotchWindowController.shared.isDisplayAsleep && NotchWindowController.shared.isExpanded else { continue }
                 bluetoothManager.refreshDevices()
             }
         }
@@ -59,7 +60,7 @@ struct BluetoothView: View {
     private var headerRow: some View {
         HStack(spacing: 8) {
             HStack(spacing: 6) {
-                NotchSectionLabel(localized("Bluetooth"), systemImage: "antenna.radiowaves.left.and.right", tint: .indigo)
+                NotchSectionLabel(localized("Bluetooth"), systemImage: "antenna.radiowaves.left.and.right", tint: .cyan)
 
                 if !bluetoothManager.connectedDevices.isEmpty {
                     let count = bluetoothManager.connectedDevices.count
@@ -74,28 +75,10 @@ struct BluetoothView: View {
 
             Spacer()
 
-            HStack(spacing: 4) {
-                ForEach(FilterMode.allCases) { mode in
-                    let isSelected = filterMode == mode
-                    Button {
-                        NotchHaptics.tap()
-                        withAnimation(.spring(response: 0.25, dampingFraction: 0.8)) {
-                            filterMode = mode
-                        }
-                    } label: {
-                        Text(mode.title)
-                            .font(.system(size: 10, weight: isSelected ? .bold : .medium, design: .rounded))
-                            .foregroundStyle(isSelected ? Color.black : Color.white.opacity(0.8))
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 4.5)
-                            .background(
-                                Capsule().fill(isSelected ? Color.white : Color.white.opacity(0.09))
-                            )
-                            .contentShape(Capsule())
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
+            NotchSegmentedControl(
+                options: FilterMode.allCases.map { .init(id: $0, title: $0.title, tint: .white) },
+                selection: $filterMode
+            )
 
             if preferences.bluetoothShowMacBattery && batteryManager.isMonitoring {
                 let sysBattery = batteryManager.batteryInfo
@@ -389,7 +372,7 @@ struct BluetoothView: View {
     private var emptyStateView: some View {
         NotchEmptyState(
             systemImage: "antenna.radiowaves.left.and.right",
-            tint: .indigo,
+            tint: .cyan,
             title: filterMode == .connected ? localized("No connected accessories") : localized("No paired Bluetooth devices"),
             message: filterMode == .connected
                 ? localized("Connect headphones, keyboards, mice, or controllers via macOS Bluetooth menu.")

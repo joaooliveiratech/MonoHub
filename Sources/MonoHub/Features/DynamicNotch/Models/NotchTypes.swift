@@ -298,8 +298,6 @@ enum HardwareNotchTabBarStyle: String, CaseIterable, Identifiable, Codable, Send
     case unifiedBelow
     case splitEars
 
-    static var belowNotch: Self { .unifiedBelow }
-
     var id: String { rawValue }
 
     var title: String {
@@ -429,8 +427,6 @@ enum NotchIdleAnimation: String, CaseIterable, Identifiable, Codable, Sendable {
         }
     }
 
-    var accentColor: Color { tint }
-
     static let concreteStyles: [NotchIdleAnimation] = [
         .bongoCat, .lordOfTheRings, .samurai, .starWars, .pokemon,
         .pacman, .matrix, .nyanCat, .dinoRunner, .spaceInvaders
@@ -442,10 +438,6 @@ enum NotchIdleAnimation: String, CaseIterable, Identifiable, Codable, Sendable {
         guard !styles.isEmpty else { return .bongoCat }
         let bucket = Int(date.timeIntervalSince1970 / 45.0)
         return styles[abs(bucket) % styles.count]
-    }
-
-    func resolved(for date: Date) -> NotchIdleAnimation {
-        resolved(at: date)
     }
 }
 

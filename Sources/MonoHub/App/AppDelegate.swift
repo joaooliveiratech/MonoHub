@@ -85,7 +85,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 if isSettings || !features.isEnabled(.dynamicNotch) {
                     MainWindowController.shared.show(item: .notch)
                 } else {
-                    NotchWindowController.shared.toggleExpanded()
+                    let segments = url.pathComponents.filter { $0 != "/" }
+                    if url.host?.lowercased() == "tab",
+                       let raw = segments.first,
+                       let tab = NotchTab.allCases.first(where: { $0.rawValue.caseInsensitiveCompare(raw) == .orderedSame }) {
+                        NotchPreferences.shared.selectTab(tab)
+                        if !NotchWindowController.shared.isExpanded {
+                            NotchWindowController.shared.toggleExpanded()
+                        }
+                    } else {
+                        NotchWindowController.shared.toggleExpanded()
+                    }
                 }
                 continue
             }

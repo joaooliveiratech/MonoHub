@@ -9,9 +9,9 @@ import SwiftUI
 struct ModelTests {
     @Test("AppInfo version and build metadata are valid")
     func appInfoMetadata() {
-        #expect(AppInfo.version == "0.17.6")
-        #expect(AppInfo.build == "62")
-        #expect(AppInfo.fullVersionString == "0.17.6 (62)")
+        #expect(AppInfo.version == "0.17.7")
+        #expect(AppInfo.build == "63")
+        #expect(AppInfo.fullVersionString == "0.17.7 (63)")
         #expect(AppInfo.bundleIdentifier == "com.antigravity.monohub")
     }
 
@@ -270,7 +270,6 @@ struct PreferencesTests {
         #expect(prefs.homeShowHeaderDate == true)
         #expect(prefs.homeShowHeaderBattery == false)
         #expect(prefs.bluetoothShowMacBattery == false)
-        #expect(prefs.showBatteryWhenIdle == false)
         #expect(prefs.dynamicIslandHoverBounce == true)
         #expect(prefs.calendarLiveActivityLeadMinutes == 15)
         #expect(prefs.showHomeMusicCard == true)
@@ -769,7 +768,7 @@ struct ServiceManagerTests {
         prefs.autoAdjustHeight = true
 
         let homeHeight = prefs.effectiveExpandedHeight(for: .home)
-        #expect(homeHeight >= 185 && homeHeight <= 440)
+        #expect(homeHeight >= 185 && homeHeight <= 492)
 
         let musicHeight = prefs.effectiveExpandedHeight(for: .music)
         #expect(musicHeight == (prefs.musicShowAudioRouteSelector ? 248 : 195))
@@ -1032,14 +1031,14 @@ struct NotchHardwareHeaderTests {
         #expect(prefs.hasIdleContentEnabled == true)
 
         prefs.idleAnimation = .none
-        prefs.showClockWhenIdle = true
-        prefs.showBatteryWhenIdle = true
         #expect(prefs.hasIdleContentEnabled == false)
+        #expect(prefs.engineDemand.idleMonitor == false)
 
         prefs.idleAnimation = .starWars
         prefs.idleInteractionMode = .onlyWhenTyping
         #expect(prefs.idleInteractionMode == .onlyWhenTyping)
         #expect(prefs.hasIdleContentEnabled == true)
+        #expect(prefs.engineDemand.idleMonitor == true)
 
         let monitor = IdleInteractionMonitor.shared
         let initialStrokes = monitor.strokeCount
@@ -1058,12 +1057,12 @@ struct NotchHardwareHeaderTests {
         let snap2 = monitor.snapshot(at: now.addingTimeInterval(0.05), mode: .interactive, speedMultiplier: 1.0)
         #expect(snap2.phase >= snap1.phase)
         #expect(snap2.phase - snap1.phase < 1.0)
-        #expect(NotchIdleAnimation.bongoCat.resolved(for: Date()) == .bongoCat)
+        #expect(NotchIdleAnimation.bongoCat.resolved(at: Date()) == .bongoCat)
         #expect(NotchIdleAnimation.fromStored("kittScanner") == .lordOfTheRings)
         #expect(NotchIdleAnimation.fromStored("hal9000") == .samurai)
         #expect(NotchIdleAnimation.fromStored("codingTerminal") == .pokemon)
-        #expect(NotchIdleAnimation.random.resolved(for: Date()) != .none)
-        #expect(NotchIdleAnimation.random.resolved(for: Date()) != .random)
+        #expect(NotchIdleAnimation.random.resolved(at: Date()) != .none)
+        #expect(NotchIdleAnimation.random.resolved(at: Date()) != .random)
         #expect(prefs.idleWithActivityMode == .sideBySide)
 
         let sharedSideBySideMetrics = LiveActivityCenter.metrics(
@@ -1164,7 +1163,7 @@ struct NotchHardwareHeaderTests {
 
         prefs.resetToDefaults()
         #expect(prefs.idleAnimation == .bongoCat)
-        #expect(prefs.hardwareNotchTabBarStyle == .belowNotch)
+        #expect(prefs.hardwareNotchTabBarStyle == .unifiedBelow)
         #expect(prefs.musicShowVisualizer == true)
         #expect(prefs.timerDefaultMinutes == 5)
         #expect(prefs.calendarMaxEventsShown == 5)
@@ -1173,5 +1172,27 @@ struct NotchHardwareHeaderTests {
         #expect(prefs.bluetoothHideDisconnected == false)
         #expect(prefs.shelfClickAction == .openFile)
         #expect(prefs.shelfMaxItems == 12)
+    }
+
+    @Test("System stats background demand separates live alerts from expanded-only Home card")
+    func systemStatsBackgroundDemandSeparation() {
+        let prefs = makeIsolatedPreferences()
+        prefs.showHomeHeavyProcessCard = true
+        prefs.showHeavyProcessLiveActivity = false
+        prefs.showSystemAlertPeek = false
+        #expect(prefs.engineDemand.systemStats == true)
+        #expect(prefs.engineDemand.systemStatsBackground == false)
+
+        prefs.showHeavyProcessLiveActivity = true
+        #expect(prefs.engineDemand.systemStatsBackground == true)
+
+        prefs.showHeavyProcessLiveActivity = false
+        prefs.showSystemAlertPeek = true
+        #expect(prefs.engineDemand.systemStatsBackground == true)
+
+        prefs.showHomeHeavyProcessCard = false
+        prefs.showSystemAlertPeek = false
+        #expect(prefs.engineDemand.systemStats == false)
+        #expect(prefs.engineDemand.systemStatsBackground == false)
     }
 }

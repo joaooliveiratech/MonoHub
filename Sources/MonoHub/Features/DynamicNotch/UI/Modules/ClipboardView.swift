@@ -4,7 +4,6 @@ import AppKit
 struct ClipboardView: View {
     @Bindable private var clipboardManager = ClipboardManager.shared
     @State private var copiedItemId: UUID? = nil
-    @State private var toastMessage: String? = nil
 
     init() {}
 

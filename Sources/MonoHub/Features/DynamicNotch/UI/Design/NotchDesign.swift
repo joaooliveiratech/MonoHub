@@ -2,12 +2,17 @@ import SwiftUI
 import AppKit
 
 enum NotchTheme {
+    // Tuned macOS 27 spring curves
+    static let expand = Animation.spring(duration: 0.34, bounce: 0.14)
+    static let collapse = Animation.spring(duration: 0.25, bounce: 0.04)
+    static let content = Animation.spring(duration: 0.28, bounce: 0.08)
+    static let activity = Animation.spring(duration: 0.32, bounce: 0.15)
+    static let islandBounce = Animation.spring(duration: 0.24, bounce: 0.22)
+    static let hover = Animation.spring(duration: 0.20, bounce: 0.08)
 
-    static let expand = Animation.spring(response: 0.32, dampingFraction: 0.86)
-    static let collapse = Animation.spring(response: 0.26, dampingFraction: 0.92)
-    static let content = Animation.spring(response: 0.28, dampingFraction: 0.86)
-    static let activity = Animation.spring(response: 0.32, dampingFraction: 0.84)
-    static let islandBounce = Animation.spring(response: 0.26, dampingFraction: 0.74)
+    static func motion(_ animation: Animation, reduced: Bool) -> Animation? {
+        reduced ? nil : animation
+    }
 
     static let horizontalPadding: CGFloat = 16
     static let verticalPadding: CGFloat = 12
@@ -18,23 +23,23 @@ enum NotchTheme {
     static let cardPaddingVertical: CGFloat = 9
     static let cardHeight: CGFloat = 84
     static let artworkRadius: CGFloat = 10
-    static let expandedEarRadius: CGFloat = 10
+    static let expandedEarRadius: CGFloat = 11
 
     static let notchFill = Color.black
-    static let cardFill = Color.white.opacity(0.068)
-    static let cardFillHover = Color.white.opacity(0.108)
-    static let cardStroke = Color.white.opacity(0.08)
-    static let controlFill = Color.white.opacity(0.115)
-    static let controlFillHover = Color.white.opacity(0.20)
+    static let cardFill = Color.white.opacity(0.064)
+    static let cardFillHover = Color.white.opacity(0.112)
+    static let cardStroke = Color.white.opacity(0.09)
+    static let controlFill = Color.white.opacity(0.11)
+    static let controlFillHover = Color.white.opacity(0.19)
 
     static let primaryText = Color.white
-    static let secondaryText = Color.white.opacity(0.68)
-    static let tertiaryText = Color.white.opacity(0.44)
+    static let secondaryText = Color.white.opacity(0.70)
+    static let tertiaryText = Color.white.opacity(0.46)
 
     static let eyebrow = Font.system(size: 10, weight: .semibold)
-    static let title = Font.system(size: 13, weight: .semibold)
-    static let largeTitle = Font.system(size: 17, weight: .bold)
-    static let body = Font.system(size: 11, weight: .regular)
+    static let title = Font.system(size: 13, weight: .semibold, design: .rounded)
+    static let largeTitle = Font.system(size: 17, weight: .bold, design: .rounded)
+    static let body = Font.system(size: 11.5, weight: .regular)
     static let caption = Font.system(size: 10, weight: .medium)
     static let monoDigits = Font.system(size: 12, weight: .semibold, design: .rounded).monospacedDigit()
 }
@@ -43,8 +48,8 @@ extension AnyTransition {
 
     static var expandedNotchMorph: AnyTransition {
         .asymmetric(
-            insertion: .opacity.combined(with: .scale(scale: 0.94, anchor: .top)),
-            removal: .opacity.combined(with: .scale(scale: 0.95, anchor: .top))
+            insertion: .opacity.combined(with: .scale(scale: 0.95, anchor: .top)),
+            removal: .opacity.combined(with: .scale(scale: 0.96, anchor: .top))
         )
     }
 
@@ -55,19 +60,15 @@ extension AnyTransition {
         )
     }
 
-    static var notchMorph: AnyTransition {
-        expandedNotchMorph
-    }
-
     static func notchTab(direction: CGFloat) -> AnyTransition {
         .asymmetric(
-            insertion: .offset(x: 18 * direction).combined(with: .opacity),
-            removal: .offset(x: -18 * direction).combined(with: .opacity)
+            insertion: .offset(x: 16 * direction).combined(with: .opacity),
+            removal: .offset(x: -16 * direction).combined(with: .opacity)
         )
     }
 
     static var notchActivity: AnyTransition {
-        .opacity.combined(with: .scale(scale: 0.85, anchor: .center))
+        .opacity.combined(with: .scale(scale: 0.86, anchor: .center))
     }
 }
 
@@ -76,7 +77,7 @@ extension View {
     func notchModule(alignment: Alignment = .topLeading) -> some View {
         self
             .padding(.horizontal, NotchTheme.horizontalPadding)
-            .padding(.top, 8)
+            .padding(.top, 9)
             .padding(.bottom, 14)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: alignment)
     }
@@ -86,48 +87,47 @@ extension View {
         isHovered: Bool = false,
         tint: Color? = nil
     ) -> some View {
-        self.background(
+        let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
+        return self.background(
             ZStack {
-                RoundedRectangle(cornerRadius: radius, style: .continuous)
-                    .fill(
-                        LinearGradient(
-                            colors: [
-                                isHovered ? NotchTheme.cardFillHover : Color.white.opacity(0.095),
-                                isHovered ? Color.white.opacity(0.075) : NotchTheme.cardFill
-                            ],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
+                shape.fill(
+                    LinearGradient(
+                        colors: [
+                            isHovered ? NotchTheme.cardFillHover : Color.white.opacity(0.095),
+                            isHovered ? Color.white.opacity(0.072) : NotchTheme.cardFill
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
                     )
+                )
 
                 if let tint {
-                    RoundedRectangle(cornerRadius: radius, style: .continuous)
-                        .fill(
-                            RadialGradient(
-                                colors: [
-                                    tint.opacity(isHovered ? 0.14 : 0.08),
-                                    Color.clear
-                                ],
-                                center: .topLeading,
-                                startRadius: 4,
-                                endRadius: 150
-                            )
+                    shape.fill(
+                        RadialGradient(
+                            colors: [
+                                tint.opacity(isHovered ? 0.16 : 0.085),
+                                Color.clear
+                            ],
+                            center: .topLeading,
+                            startRadius: 4,
+                            endRadius: 155
                         )
+                    )
                 }
 
-                RoundedRectangle(cornerRadius: radius, style: .continuous)
-                    .strokeBorder(
-                        LinearGradient(
-                            colors: [
-                                Color.white.opacity(isHovered ? 0.24 : 0.15),
-                                (tint ?? .white).opacity(isHovered ? 0.12 : 0.05),
-                                Color.white.opacity(isHovered ? 0.08 : 0.03)
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        ),
-                        lineWidth: 0.75
-                    )
+                // Specular top-edge liquid glass highlight
+                shape.strokeBorder(
+                    LinearGradient(
+                        colors: [
+                            Color.white.opacity(isHovered ? 0.30 : 0.19),
+                            (tint ?? .white).opacity(isHovered ? 0.14 : 0.06),
+                            Color.white.opacity(isHovered ? 0.10 : 0.04)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 0.75
+                )
             }
         )
     }
@@ -168,7 +168,7 @@ struct NotchSectionLabel: View {
                 .foregroundStyle(tint)
             Text(title.uppercased())
                 .font(NotchTheme.eyebrow)
-                .tracking(0.35)
+                .tracking(0.4)
                 .foregroundStyle(NotchTheme.secondaryText)
                 .lineLimit(1)
         }
@@ -184,7 +184,9 @@ struct NotchCard<Content: View, Accessory: View>: View {
     let accessory: Accessory
     var onCardTapped: (() -> Void)? = nil
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isHovering = false
+    @State private var didPushCursor = false
 
     init(
         _ title: String,
@@ -204,60 +206,73 @@ struct NotchCard<Content: View, Accessory: View>: View {
         self.content = content()
     }
 
+    private var isInteractive: Bool {
+        destination != nil || onCardTapped != nil
+    }
+
     private func handleNavigate() {
-        guard let destination else { return }
+        guard isInteractive else { return }
         NotchHaptics.tap()
         onCardTapped?()
-        let homeHeight = NotchPreferences.shared.effectiveExpandedHeight(for: .home)
-        NotchWindowController.shared.recordNavigationFromExpanded(previousHeight: homeHeight)
-        withAnimation(NotchTheme.content) {
-            if !NotchPreferences.shared.isTabEnabled(destination) {
-                NotchPreferences.shared.setTab(destination, enabled: true)
+        if let destination {
+            let homeHeight = NotchPreferences.shared.effectiveExpandedHeight(for: .home)
+            NotchWindowController.shared.recordNavigationFromExpanded(previousHeight: homeHeight)
+            withAnimation(NotchTheme.motion(NotchTheme.content, reduced: reduceMotion)) {
+                if !NotchPreferences.shared.isTabEnabled(destination) {
+                    NotchPreferences.shared.setTab(destination, enabled: true)
+                }
+                NotchPreferences.shared.selectTab(destination)
             }
-            NotchPreferences.shared.selectTab(destination)
+        } else {
+            withAnimation(NotchTheme.motion(NotchTheme.collapse, reduced: reduceMotion)) {
+                NotchWindowController.shared.isExpanded = false
+            }
+        }
+    }
+
+    private func updateCursor(hovering: Bool) {
+        guard isInteractive else { return }
+        if hovering && !didPushCursor {
+            NSCursor.pointingHand.push()
+            didPushCursor = true
+        } else if !hovering && didPushCursor {
+            NSCursor.pop()
+            didPushCursor = false
         }
     }
 
     var body: some View {
-        ZStack {
-            if destination != nil || onCardTapped != nil {
-                Button(action: handleNavigate) {
-                    RoundedRectangle(cornerRadius: NotchTheme.cardRadius, style: .continuous)
-                        .fill(Color.white.opacity(0.001))
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                NotchSectionLabel(title, systemImage: systemImage, tint: tint)
+                Spacer(minLength: 4)
+                accessory
+                if isInteractive {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(isHovering ? NotchTheme.secondaryText : NotchTheme.tertiaryText)
+                        .offset(x: isHovering ? 1.5 : 0)
                 }
-                .buttonStyle(.plain)
             }
 
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 6) {
-                    NotchSectionLabel(title, systemImage: systemImage, tint: tint)
-                    Spacer(minLength: 4)
-                    accessory
-                    if destination != nil || onCardTapped != nil {
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 9, weight: .bold))
-                            .foregroundStyle(isHovering ? NotchTheme.secondaryText : NotchTheme.tertiaryText)
-                            .offset(x: isHovering ? 1.5 : 0)
-                    }
-                }
-
-                content
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-            }
-            .padding(.horizontal, NotchTheme.cardPaddingHorizontal)
-            .padding(.vertical, NotchTheme.cardPaddingVertical)
+            content
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         }
+        .padding(.horizontal, NotchTheme.cardPaddingHorizontal)
+        .padding(.vertical, NotchTheme.cardPaddingVertical)
         .frame(maxWidth: .infinity, minHeight: NotchTheme.cardHeight, alignment: .topLeading)
-        .notchCardSurface(isHovered: isHovering && destination != nil, tint: tint)
+        .notchCardSurface(isHovered: isHovering && isInteractive, tint: tint)
         .contentShape(RoundedRectangle(cornerRadius: NotchTheme.cardRadius, style: .continuous))
         .onHover { hovering in
-            withAnimation(.spring(response: 0.24, dampingFraction: 0.78)) { isHovering = hovering }
-            if destination != nil {
-                if hovering {
-                    NSCursor.pointingHand.push()
-                } else {
-                    NSCursor.pop()
-                }
+            withAnimation(NotchTheme.motion(NotchTheme.hover, reduced: reduceMotion)) {
+                isHovering = hovering
+            }
+            updateCursor(hovering: hovering)
+        }
+        .onDisappear {
+            if didPushCursor {
+                NSCursor.pop()
+                didPushCursor = false
             }
         }
         .onTapGesture {
@@ -276,11 +291,19 @@ struct NotchPrimaryButtonStyle: ButtonStyle {
             .foregroundStyle(foreground)
             .padding(.horizontal, 14)
             .padding(.vertical, 6)
-            .background(Capsule().fill(tint))
+            .background(
+                Capsule(style: .continuous)
+                    .fill(tint)
+                    .overlay(
+                        Capsule(style: .continuous)
+                            .strokeBorder(Color.white.opacity(0.26), lineWidth: 0.5)
+                    )
+            )
+            .shadow(color: tint == .white ? Color.black.opacity(0.32) : tint.opacity(0.28), radius: 5, y: 1.5)
             .contentShape(Capsule())
-            .scaleEffect(configuration.isPressed ? 0.94 : 1)
-            .opacity(configuration.isPressed ? 0.85 : 1)
-            .animation(.spring(response: 0.25, dampingFraction: 0.7), value: configuration.isPressed)
+            .scaleEffect(configuration.isPressed ? 0.95 : 1)
+            .opacity(configuration.isPressed ? 0.88 : 1)
+            .animation(.spring(duration: 0.20, bounce: 0.15), value: configuration.isPressed)
     }
 }
 
@@ -295,11 +318,19 @@ struct NotchSecondaryButtonStyle: ButtonStyle {
             .padding(.horizontal, 11)
             .padding(.vertical, 6)
             .background(
-                Capsule().fill(isSelected ? selectedTint : (configuration.isPressed ? NotchTheme.controlFillHover : NotchTheme.controlFill))
+                Capsule(style: .continuous)
+                    .fill(isSelected ? selectedTint : (configuration.isPressed ? NotchTheme.controlFillHover : NotchTheme.controlFill))
+                    .overlay(
+                        Capsule(style: .continuous)
+                            .strokeBorder(
+                                isSelected ? selectedTint.opacity(0.55) : Color.white.opacity(0.14),
+                                lineWidth: 0.6
+                            )
+                    )
             )
             .contentShape(Capsule())
-            .scaleEffect(configuration.isPressed ? 0.94 : 1)
-            .animation(.spring(response: 0.25, dampingFraction: 0.7), value: configuration.isPressed)
+            .scaleEffect(configuration.isPressed ? 0.95 : 1)
+            .animation(.spring(duration: 0.20, bounce: 0.15), value: configuration.isPressed)
     }
 }
 
@@ -313,10 +344,17 @@ struct NotchCircleButtonStyle: ButtonStyle {
             .font(.system(size: size * 0.4, weight: .bold))
             .foregroundStyle(foreground)
             .frame(width: size, height: size)
-            .background(Circle().fill(fill))
+            .background(
+                Circle()
+                    .fill(fill)
+                    .overlay(
+                        Circle()
+                            .strokeBorder(Color.white.opacity(0.18), lineWidth: 0.5)
+                    )
+            )
             .contentShape(Circle())
-            .scaleEffect(configuration.isPressed ? 0.88 : 1)
-            .animation(.spring(response: 0.25, dampingFraction: 0.65), value: configuration.isPressed)
+            .scaleEffect(configuration.isPressed ? 0.90 : 1)
+            .animation(.spring(duration: 0.20, bounce: 0.2), value: configuration.isPressed)
     }
 }
 
@@ -327,15 +365,15 @@ struct NotchPlainIconButtonStyle: ButtonStyle {
         let hitSize = max(30, size * 2)
         configuration.label
             .font(.system(size: size, weight: .semibold))
-            .foregroundStyle(Color.white.opacity(configuration.isPressed ? 0.55 : 0.90))
+            .foregroundStyle(Color.white.opacity(configuration.isPressed ? 0.55 : 0.92))
             .frame(width: hitSize, height: hitSize)
             .background(
                 Circle()
-                    .fill(Color.white.opacity(configuration.isPressed ? 0.12 : 0.001))
+                    .fill(Color.white.opacity(configuration.isPressed ? 0.14 : 0.001))
             )
             .contentShape(Circle())
-            .scaleEffect(configuration.isPressed ? 0.86 : 1)
-            .animation(.spring(response: 0.25, dampingFraction: 0.65), value: configuration.isPressed)
+            .scaleEffect(configuration.isPressed ? 0.88 : 1)
+            .animation(.spring(duration: 0.20, bounce: 0.2), value: configuration.isPressed)
     }
 }
 
@@ -429,9 +467,15 @@ struct NotchArtworkView: View {
     var cornerRadius: CGFloat = NotchTheme.artworkRadius
 
     var body: some View {
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
         ZStack {
-            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                .fill(LinearGradient(colors: [Color.pink.opacity(0.35), Color.purple.opacity(0.35)], startPoint: .topLeading, endPoint: .bottomTrailing))
+            shape.fill(
+                LinearGradient(
+                    colors: [Color.pink.opacity(0.35), Color.purple.opacity(0.35)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
 
             if let image {
                 Image(nsImage: image)
@@ -447,12 +491,18 @@ struct NotchArtworkView: View {
             }
         }
         .frame(width: size, height: size)
-        .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+        .clipShape(shape)
         .overlay(
-            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                .strokeBorder(Color.white.opacity(0.12), lineWidth: 0.5)
+            shape.strokeBorder(
+                LinearGradient(
+                    colors: [Color.white.opacity(0.24), Color.white.opacity(0.06)],
+                    startPoint: .top,
+                    endPoint: .bottom
+                ),
+                lineWidth: 0.6
+            )
         )
-        .animation(.spring(response: 0.32, dampingFraction: 0.85), value: image != nil)
+        .animation(.spring(duration: 0.30, bounce: 0.05), value: image != nil)
     }
 }
 
@@ -461,10 +511,12 @@ struct EqualizerAnimationView: View {
     var tint: Color = .pink
     var maxHeight: CGFloat = 14
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     var body: some View {
         let controller = NotchWindowController.shared
         let visible = !controller.isDisplayAsleep && !AppExclusionManager.shared.isSuppressed
-        let active = isAnimating && controller.isExpanded && visible
+        let active = isAnimating && controller.isExpanded && visible && !reduceMotion
         Image(systemName: "waveform")
             .font(.system(size: maxHeight, weight: .semibold))
             .foregroundStyle(tint)
@@ -531,6 +583,7 @@ struct NotchDateBadge: View {
     var size: CGFloat = 38
 
     var body: some View {
+        let shape = RoundedRectangle(cornerRadius: size * 0.24, style: .continuous)
         VStack(spacing: 0) {
             Text(NotchFormatters.monthBadge(date))
                 .font(.system(size: size * 0.22, weight: .bold, design: .rounded))
@@ -541,8 +594,14 @@ struct NotchDateBadge: View {
         }
         .frame(width: size, height: size)
         .background(
-            RoundedRectangle(cornerRadius: size * 0.24, style: .continuous)
-                .fill(Color.white.opacity(0.1))
+            shape.fill(
+                LinearGradient(
+                    colors: [Color.white.opacity(0.14), Color.white.opacity(0.08)],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            )
+            .overlay(shape.strokeBorder(Color.white.opacity(0.14), lineWidth: 0.5))
         )
     }
 }
@@ -590,7 +649,7 @@ struct NotchCapsuleSlider: View {
 
             ZStack(alignment: .leading) {
                 Capsule(style: .continuous)
-                    .fill(Color.white.opacity(active ? 0.18 : 0.13))
+                    .fill(Color.white.opacity(active ? 0.20 : 0.13))
                     .frame(height: currentHeight)
 
                 if normalizedValue > 0.005 {
@@ -624,11 +683,11 @@ struct NotchCapsuleSlider: View {
         }
         .frame(height: max(18, expandedHeight + 8))
         .onHover { hovering in
-            withAnimation(.spring(response: 0.22, dampingFraction: 0.75)) {
+            withAnimation(.spring(duration: 0.20, bounce: 0.12)) {
                 isHovering = hovering
             }
         }
-        .animation(.spring(response: 0.22, dampingFraction: 0.75), value: active)
+        .animation(.spring(duration: 0.20, bounce: 0.12), value: active)
     }
 }
 
@@ -638,6 +697,7 @@ struct NotchSegmentedControl<SelectionValue: Hashable>: View {
         let title: String
         var icon: String? = nil
         var tint: Color = .white
+        var badgeCount: Int? = nil
     }
 
     let options: [Option]
@@ -651,7 +711,7 @@ struct NotchSegmentedControl<SelectionValue: Hashable>: View {
                 Button {
                     guard !isSelected else { return }
                     NotchHaptics.tap()
-                    withAnimation(.spring(response: 0.28, dampingFraction: 0.8)) {
+                    withAnimation(.spring(duration: 0.26, bounce: 0.10)) {
                         selection = option.id
                     }
                 } label: {
@@ -662,15 +722,27 @@ struct NotchSegmentedControl<SelectionValue: Hashable>: View {
                         }
                         Text(option.title)
                             .font(.system(size: 11, weight: isSelected ? .semibold : .medium, design: .rounded))
+                            .lineLimit(1)
+                        if let badgeCount = option.badgeCount, badgeCount > 0 {
+                            Text("\(badgeCount)")
+                                .font(.system(size: 9, weight: .bold, design: .rounded).monospacedDigit())
+                                .padding(.horizontal, 4.5)
+                                .padding(.vertical, 0.5)
+                                .background(
+                                    Capsule(style: .continuous)
+                                        .fill(isSelected ? Color.black.opacity(0.16) : option.tint.opacity(0.24))
+                                )
+                                .foregroundStyle(isSelected ? Color.black : option.tint)
+                        }
                     }
-                    .foregroundStyle(isSelected ? Color.black : Color.white.opacity(0.78))
-                    .padding(.horizontal, 11)
+                    .foregroundStyle(isSelected ? Color.black : Color.white.opacity(0.80))
+                    .padding(.horizontal, 10)
                     .padding(.vertical, 5)
                     .background {
                         if isSelected {
                             Capsule(style: .continuous)
                                 .fill(option.tint)
-                                .shadow(color: option.tint.opacity(0.3), radius: 4, y: 1)
+                                .shadow(color: option.tint == .white ? Color.black.opacity(0.28) : option.tint.opacity(0.28), radius: 4, y: 1)
                                 .matchedGeometryEffect(id: "segment_pill", in: segmentNamespace)
                         }
                     }
@@ -682,10 +754,17 @@ struct NotchSegmentedControl<SelectionValue: Hashable>: View {
         .padding(3)
         .background(
             Capsule(style: .continuous)
-                .fill(Color.white.opacity(0.09))
+                .fill(Color.white.opacity(0.085))
                 .overlay(
                     Capsule(style: .continuous)
-                        .strokeBorder(Color.white.opacity(0.08), lineWidth: 0.5)
+                        .strokeBorder(
+                            LinearGradient(
+                                colors: [Color.white.opacity(0.18), Color.white.opacity(0.05)],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            ),
+                            lineWidth: 0.6
+                        )
                 )
         )
     }

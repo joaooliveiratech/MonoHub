@@ -1,7 +1,6 @@
 import AppKit
 import SwiftUI
 import Observation
-import Combine
 
 final class NotchPanel: NSPanel {
     override init(
@@ -310,15 +309,15 @@ final class NotchWindowController {
             CameraMirrorManager.shared.releaseResources()
             TeleprompterManager.shared.pause()
             HUDManager.shared.hide()
+            setScrollMonitoring(false)
             for panel in windows.values {
                 panel.orderOut(nil)
             }
         } else if !AppExclusionManager.shared.isSuppressed {
-            if NotchFeature.isRunning, NotchPreferences.shared.idleAnimation != .none {
-                IdleInteractionMonitor.shared.ensureStarted()
-            }
+            MediaPlaybackManager.shared.handleDisplayWake()
             refreshWindows()
         }
+        NotchFeature.syncDynamicAudience()
         AudioDeviceManager.shared.syncMeteringState()
         SystemMonitorEngine.shared.reloadConfiguration()
     }
@@ -413,17 +412,16 @@ final class NotchWindowController {
         if suppressed {
             expandedScreens.removeAll()
             IdleInteractionMonitor.shared.stop()
+            setScrollMonitoring(false)
             for panel in windows.values {
                 panel.orderOut(nil)
             }
-        } else {
-            if !isDisplayAsleep, NotchFeature.isRunning, NotchPreferences.shared.idleAnimation != .none {
-                IdleInteractionMonitor.shared.ensureStarted()
-            }
+        } else if !isDisplayAsleep {
             for panel in windows.values {
                 panel.orderFrontRegardless()
             }
         }
+        NotchFeature.syncDynamicAudience()
         SystemMonitorEngine.shared.reloadConfiguration()
     }
 
@@ -443,7 +441,7 @@ final class NotchWindowController {
 
         let prefs = NotchPreferences.shared
         let canvasWidth = max(prefs.openNotchWidth + 100, 740)
-        let canvasHeight: CGFloat = max(prefs.openNotchHeight + 80, 520)
+        let canvasHeight: CGFloat = max(prefs.openNotchHeight + 80, 560)
         let suppressed = AppExclusionManager.shared.isSuppressed
 
         for screen in enabledScreens {
@@ -499,17 +497,27 @@ final class NotchWindowController {
     }
 
     private static func hitTest(point: NSPoint, in canvas: CGSize, screen: NSScreen, screenID: String) -> Bool {
+        let controller = NotchWindowController.shared
+        guard !controller.isDisplayAsleep else { return false }
+
+        let isExpanded = controller.expandedScreens.contains(screenID)
+        if !isExpanded && point.y < canvas.height - 110 {
+            return false
+        }
+
         let prefs = NotchPreferences.shared
-        let isExpanded = NotchWindowController.shared.expandedScreens.contains(screenID)
         let geometry = DisplayManager.calculateGeometry(for: screen, preferences: prefs)
         let metrics = LiveActivityCenter.shared.metrics(for: geometry)
         let earRadius = isExpanded ? NotchTheme.expandedEarRadius : (geometry.hasHardwareNotch ? prefs.closedTopCornerRadius : 0)
         let width = (isExpanded ? prefs.openNotchWidth : metrics.width) + earRadius * 2
-        let tabHeight = prefs.effectiveExpandedHeight(for: prefs.resolvedActiveTab, headerHeight: geometry.expandedHeaderHeight)
+        let effectiveHeaderHeight: CGFloat = (geometry.hasHardwareNotch && prefs.hardwareNotchTabBarStyle == .splitEars)
+            ? max(geometry.notchHeight, 36)
+            : geometry.expandedHeaderHeight
+        let tabHeight = prefs.effectiveExpandedHeight(for: prefs.resolvedActiveTab, headerHeight: effectiveHeaderHeight)
         let effectiveHeight: CGFloat = {
             if isExpanded {
-                if let graceUntil = NotchWindowController.shared.navigationGraceUntil, Date() < graceUntil {
-                    return max(tabHeight, NotchWindowController.shared.previousExpandedHeight)
+                if let graceUntil = controller.navigationGraceUntil, Date() < graceUntil {
+                    return max(tabHeight, controller.previousExpandedHeight)
                 }
                 return tabHeight
             }

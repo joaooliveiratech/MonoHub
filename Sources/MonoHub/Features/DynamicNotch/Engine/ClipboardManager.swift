@@ -22,6 +22,8 @@ final class ClipboardManager {
     @ObservationIgnored private var lastChangeCount: Int = -1
     @ObservationIgnored private var isInternalWrite: Bool = false
     @ObservationIgnored private let thumbnailCache = NSCache<NSString, NSImage>()
+    @ObservationIgnored private let imageStorageURL: URL
+    @ObservationIgnored private let pinnedStorageURL: URL
 
     @ObservationIgnored var workspaceOpener: (URL) -> Bool = { url in
         guard !AppInfo.isRunningTests else { return true }
@@ -56,8 +58,17 @@ final class ClipboardManager {
     }
 
     private init() {
+        let cachesBase = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
+            .appendingPathComponent("com.antigravity.monohub/ClipboardImages")
+        try? FileManager.default.createDirectory(at: cachesBase, withIntermediateDirectories: true)
+        self.imageStorageURL = cachesBase
+
+        let appSupportBase = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+            .appendingPathComponent("MonoHub")
+        try? FileManager.default.createDirectory(at: appSupportBase, withIntermediateDirectories: true)
+        self.pinnedStorageURL = appSupportBase.appendingPathComponent("clipboard_pinned.json")
+
         thumbnailCache.countLimit = 100
-        prepareStorageDirectories()
     }
 
     var lastCopiedItem: ClipboardItem? {
@@ -147,12 +158,12 @@ final class ClipboardManager {
 
     private func startTimer() {
         guard isRunning, !isScreenAsleep, !isSessionLocked, monitorTimer == nil else { return }
-        let timer = Timer(timeInterval: 1.2, repeats: true) { _ in
+        let timer = Timer(timeInterval: 1.5, repeats: true) { _ in
             MainActor.assumeIsolated {
                 ClipboardManager.shared.pollPasteboard()
             }
         }
-        timer.tolerance = 0.4
+        timer.tolerance = 0.5
         RunLoop.main.add(timer, forMode: .common)
         monitorTimer = timer
     }
@@ -415,7 +426,7 @@ final class ClipboardManager {
         }
     }
 
-    private func enforceCapacityLimit() {
+    func enforceCapacityLimit() {
         let limit = max(10, NotchPreferences.shared.clipboardHistoryLimit)
         while items.count > limit {
             if let lastUnpinnedIdx = items.lastIndex(where: { !$0.isPinned }) {
@@ -589,25 +600,6 @@ final class ClipboardManager {
         NotchHaptics.tap()
     }
 
-    private var imageStorageURL: URL {
-        let base = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
-            .appendingPathComponent("com.antigravity.monohub/ClipboardImages")
-        try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
-        return base
-    }
-
-    private var pinnedStorageURL: URL {
-        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-            .appendingPathComponent("MonoHub")
-        try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
-        return base.appendingPathComponent("clipboard_pinned.json")
-    }
-
-    private func prepareStorageDirectories() {
-        _ = imageStorageURL
-        _ = pinnedStorageURL
-    }
-
     func thumbnail(for item: ClipboardItem) -> NSImage? {
         guard let fileName = item.imageFileName else { return nil }
         if let cached = thumbnailCache.object(forKey: fileName as NSString) {
@@ -640,14 +632,13 @@ final class ClipboardManager {
         let size = image.size
         guard size.width > 0 && size.height > 0 else { return nil }
         let scale = min(maxDimension / size.width, maxDimension / size.height, 1.0)
-        let targetSize = NSSize(width: max(1, size.width * scale), height: max(1, size.height * scale))
+        let targetSize = NSSize(width: max(1, (size.width * scale).rounded()), height: max(1, (size.height * scale).rounded()))
 
-        let target = NSImage(size: targetSize)
-        target.lockFocus()
-        NSGraphicsContext.current?.imageInterpolation = .high
-        image.draw(in: NSRect(origin: .zero, size: targetSize), from: NSRect(origin: .zero, size: size), operation: .copy, fraction: 1.0)
-        target.unlockFocus()
-        return target
+        return NSImage(size: targetSize, flipped: false) { rect in
+            NSGraphicsContext.current?.imageInterpolation = .high
+            image.draw(in: rect, from: NSRect(origin: .zero, size: size), operation: .copy, fraction: 1.0)
+            return true
+        }
     }
 
     private func deleteImageFile(named fileName: String?) {

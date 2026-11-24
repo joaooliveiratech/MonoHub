@@ -440,12 +440,20 @@ struct LiveActivityCompactTrailing: View {
             let activeEvent = center.activeCalendarEvent
             let isNow = activeEvent?.isNow ?? true
             let badgeColor: Color = isNow ? .green : .orange
+            let liveUpdates = !NotchWindowController.shared.isDisplayAsleep && !AppExclusionManager.shared.isSuppressed
             HStack(spacing: 4) {
                 Image(systemName: "circle.fill")
                     .font(.system(size: 6))
                     .foregroundStyle(badgeColor)
-                TimelineView(.everyMinute) { _ in
-                    Text(activeEvent?.shortIslandCountdown ?? "Agora")
+                if liveUpdates {
+                    TimelineView(.everyMinute) { _ in
+                        Text(activeEvent?.shortIslandCountdown ?? localized("Now"))
+                            .font(.system(size: 11, weight: .semibold, design: .rounded))
+                            .monospacedDigit()
+                            .foregroundStyle(badgeColor)
+                    }
+                } else {
+                    Text(activeEvent?.shortIslandCountdown ?? localized("Now"))
                         .font(.system(size: 11, weight: .semibold, design: .rounded))
                         .monospacedDigit()
                         .foregroundStyle(badgeColor)

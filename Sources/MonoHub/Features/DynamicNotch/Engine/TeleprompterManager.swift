@@ -25,7 +25,7 @@ final class TeleprompterManager {
         didSet { NotchPreferences.shared.teleprompterShowFocusGuide = showFocusGuide }
     }
     var isMirrored: Bool {
-        didSet { NotchPreferences.shared.teleprompterMirrorHorizontal = isMirrored }
+        didSet { NotchPreferences.shared.teleprompterIsMirrored = isMirrored }
     }
     var isCameraEnabled: Bool {
         didSet { defaults.set(isCameraEnabled, forKey: "monohub.teleprompter.isCameraEnabled") }
@@ -37,6 +37,7 @@ final class TeleprompterManager {
 
     @ObservationIgnored private var rawElapsedTime: TimeInterval = 0
     @ObservationIgnored private var scrollTask: Task<Void, Never>?
+    @ObservationIgnored private var persistTask: Task<Void, Never>?
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private static let scriptsKey = "monohub.teleprompter.scripts"
     @ObservationIgnored private static let activeIdKey = "monohub.teleprompter.activeScriptId"
@@ -47,7 +48,7 @@ final class TeleprompterManager {
         self.speed = prefs.teleprompterSpeed
         self.fontSize = prefs.teleprompterFontSize
         self.showFocusGuide = prefs.teleprompterShowFocusGuide
-        self.isMirrored = prefs.teleprompterMirrorHorizontal
+        self.isMirrored = prefs.teleprompterIsMirrored
         self.isCameraEnabled = defaults.object(forKey: "monohub.teleprompter.isCameraEnabled") == nil ? true : defaults.bool(forKey: "monohub.teleprompter.isCameraEnabled")
         self.cameraDimming = defaults.object(forKey: "monohub.teleprompter.cameraDimming") == nil ? 0.45 : defaults.double(forKey: "monohub.teleprompter.cameraDimming")
         loadPersistedState()
@@ -102,8 +103,15 @@ final class TeleprompterManager {
         scrollTask = Task { @MainActor [weak self] in
             var lastTick = Date()
             while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 16_666_667)
+                let frameDuration: Duration = ProcessInfo.processInfo.isLowPowerModeEnabled
+                    ? .milliseconds(33)
+                    : .nanoseconds(16_666_667)
+                try? await Task.sleep(for: frameDuration, tolerance: .milliseconds(2))
                 guard let self, self.isPlaying, !Task.isCancelled else { break }
+                if NotchWindowController.shared.isDisplayAsleep {
+                    self.pause()
+                    break
+                }
                 let now = Date()
                 let dt = min(0.05, now.timeIntervalSince(lastTick))
                 lastTick = now
@@ -186,14 +194,26 @@ final class TeleprompterManager {
         var current = activeScript
         current.content = newContent
         current.updatedAt = Date()
-        activeScript = current
+        if let index = scripts.firstIndex(where: { $0.id == current.id }) {
+            scripts[index] = current
+        } else {
+            scripts.append(current)
+        }
+        activeScriptID = current.id
+        scheduleDebouncedPersist()
     }
 
     func updateActiveTitle(_ newTitle: String) {
         var current = activeScript
         current.title = newTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? localized("Untitled") : newTitle
         current.updatedAt = Date()
-        activeScript = current
+        if let index = scripts.firstIndex(where: { $0.id == current.id }) {
+            scripts[index] = current
+        } else {
+            scripts.append(current)
+        }
+        activeScriptID = current.id
+        scheduleDebouncedPersist()
     }
 
     func deleteScript(id: UUID) {
@@ -241,7 +261,18 @@ final class TeleprompterManager {
         activeScript = current
     }
 
+    private func scheduleDebouncedPersist() {
+        persistTask?.cancel()
+        persistTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(300))
+            guard !Task.isCancelled else { return }
+            self?.persistScripts()
+        }
+    }
+
     private func persistScripts() {
+        persistTask?.cancel()
+        persistTask = nil
         if let data = try? JSONEncoder().encode(scripts) {
             defaults.set(data, forKey: Self.scriptsKey)
         }

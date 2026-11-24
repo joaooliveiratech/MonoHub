@@ -25,7 +25,7 @@ struct NotchIdleAnimationSection: View {
                     HStack(spacing: 6) {
                         Image(systemName: "play.tv.fill")
                             .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(preferences.idleAnimation.accentColor)
+                            .foregroundStyle(preferences.idleAnimation.tint)
                         Text(localized("Live Preview"))
                             .font(.system(size: 11.5, weight: .semibold))
                             .foregroundStyle(.primary)
@@ -34,48 +34,42 @@ struct NotchIdleAnimationSection: View {
 
                     Spacer(minLength: 4)
 
-                    if preferences.idleAnimation != .none && preferences.idleInteractionMode != .alwaysActive {
-                        Button {
-                            IdleInteractionMonitor.shared.simulateTypingBurst(strokes: 8)
-                        } label: {
-                            HStack(spacing: 4) {
-                                Image(systemName: "keyboard")
-                                    .font(.system(size: 10, weight: .semibold))
-                                Text(localized("Test Keypress"))
-                                    .font(.system(size: 10.5, weight: .semibold))
+                    GlassEffectContainer(spacing: 6) {
+                        HStack(spacing: 6) {
+                            if preferences.idleAnimation != .none && preferences.idleInteractionMode != .alwaysActive {
+                                Button {
+                                    IdleInteractionMonitor.shared.simulateTypingBurst(strokes: 8)
+                                } label: {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "keyboard")
+                                            .font(.system(size: 10, weight: .semibold))
+                                        Text(localized("Test Keypress"))
+                                            .font(.system(size: 10.5, weight: .semibold))
+                                    }
+                                }
+                                .buttonStyle(.glass)
+                                .controlSize(.small)
+                                .fixedSize()
                             }
-                            .padding(.horizontal, 9)
-                            .padding(.vertical, 3.5)
-                            .background(
-                                Capsule(style: .continuous)
-                                    .fill(Color.accentColor.opacity(0.14))
-                            )
-                            .foregroundStyle(Color.accentColor)
-                            .contentShape(Capsule(style: .continuous))
-                        }
-                        .buttonStyle(.plain)
-                        .fixedSize()
-                    }
 
-                    HStack(spacing: 2) {
-                        previewModePill(title: localized("Continuous"), isSelected: previewStyle == .continuous) {
-                            previewStyle = .continuous
-                        }
-                        previewModePill(title: "MacBook", isSelected: previewStyle == .hardwareCutout) {
-                            previewStyle = .hardwareCutout
-                        }
-                        previewModePill(title: localized("Music + Animation"), isSelected: previewStyle == .sharedWithMusic) {
-                            previewStyle = .sharedWithMusic
+                            HStack(spacing: 2) {
+                                previewModePill(title: localized("Continuous"), isSelected: previewStyle == .continuous) {
+                                    previewStyle = .continuous
+                                }
+                                previewModePill(title: "MacBook", isSelected: previewStyle == .hardwareCutout) {
+                                    previewStyle = .hardwareCutout
+                                }
+                                previewModePill(title: localized("Music + Animation"), isSelected: previewStyle == .sharedWithMusic) {
+                                    previewStyle = .sharedWithMusic
+                                }
+                            }
+                            .padding(2)
+                            .glassEffect(.regular, in: Capsule())
+                            .fixedSize()
                         }
                     }
-                    .padding(2)
-                    .background(
-                        Capsule(style: .continuous)
-                            .fill(Color.primary.opacity(0.07))
-                    )
-                    .fixedSize()
                 }
-                .frame(height: 24)
+                .frame(height: 26)
 
                 ZStack(alignment: .top) {
                     RoundedRectangle(cornerRadius: 11, style: .continuous)
@@ -303,11 +297,11 @@ struct NotchIdleAnimationSection: View {
                         HStack(spacing: 10) {
                             ZStack {
                                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                    .fill(isSelected ? anim.accentColor : anim.accentColor.opacity(0.14))
+                                    .fill(isSelected ? anim.tint : anim.tint.opacity(0.14))
                                     .frame(width: 28, height: 28)
                                 Image(systemName: anim.iconName)
                                     .font(.system(size: 12.5, weight: .semibold))
-                                    .foregroundStyle(isSelected ? Color.black : anim.accentColor)
+                                    .foregroundStyle(isSelected ? Color.black : anim.tint)
                             }
 
                             VStack(alignment: .leading, spacing: 1.5) {
@@ -325,17 +319,17 @@ struct NotchIdleAnimationSection: View {
 
                             if isSelected {
                                 Image(systemName: "checkmark.circle.fill")
-                                    .foregroundStyle(anim.accentColor)
+                                    .foregroundStyle(anim.tint)
                                     .font(.system(size: 13.5))
                             }
                         }
                         .padding(8)
                         .background(
                             RoundedRectangle(cornerRadius: 9, style: .continuous)
-                                .fill(isSelected ? anim.accentColor.opacity(0.11) : Color.primary.opacity(0.03))
+                                .fill(isSelected ? anim.tint.opacity(0.11) : Color.primary.opacity(0.03))
                                 .overlay(
                                     RoundedRectangle(cornerRadius: 9, style: .continuous)
-                                        .strokeBorder(isSelected ? anim.accentColor.opacity(0.55) : Color.primary.opacity(0.07), lineWidth: 1)
+                                        .strokeBorder(isSelected ? anim.tint.opacity(0.55) : Color.primary.opacity(0.07), lineWidth: 1)
                                 )
                         )
                         .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))

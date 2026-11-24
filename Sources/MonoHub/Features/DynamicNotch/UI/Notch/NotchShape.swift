@@ -34,16 +34,20 @@ nonisolated struct NotchShape: Shape {
         let w = rect.width
         let h = rect.height
         let earR = max(0, min(earRadius, h / 2, w / 4))
-        let botR = max(0, min(bottomCornerRadius, (h - earR), (w - earR * 2) / 2))
+        let botR = max(0, min(bottomCornerRadius, h - earR, (w - earR * 2) / 2))
+
+        // Continuous-curvature cubic Bezier factors for Apple-style G2 fillets
+        let earLead: CGFloat = 0.56
+        let earDrop: CGFloat = 0.44
+        let botLead: CGFloat = 0.34
 
         path.move(to: CGPoint(x: 0, y: 0))
 
         if earR > 0.1 {
-
             path.addCurve(
                 to: CGPoint(x: earR, y: earR),
-                control1: CGPoint(x: earR * 0.55, y: 0),
-                control2: CGPoint(x: earR, y: earR * 0.45)
+                control1: CGPoint(x: earR * earLead, y: 0),
+                control2: CGPoint(x: earR, y: earR * earDrop)
             )
         }
 
@@ -52,26 +56,25 @@ nonisolated struct NotchShape: Shape {
 
         path.addCurve(
             to: CGPoint(x: earR + botR, y: h),
-            control1: CGPoint(x: earR, y: h - botR * 0.36),
-            control2: CGPoint(x: earR + botR * 0.36, y: h)
+            control1: CGPoint(x: earR, y: h - botR * botLead),
+            control2: CGPoint(x: earR + botR * botLead, y: h)
         )
 
         path.addLine(to: CGPoint(x: max(earR + botR, w - earR - botR), y: h))
 
         path.addCurve(
             to: CGPoint(x: w - earR, y: leftCornerStart),
-            control1: CGPoint(x: w - earR - botR * 0.36, y: h),
-            control2: CGPoint(x: w - earR, y: h - botR * 0.36)
+            control1: CGPoint(x: w - earR - botR * botLead, y: h),
+            control2: CGPoint(x: w - earR, y: h - botR * botLead)
         )
 
         path.addLine(to: CGPoint(x: w - earR, y: earR))
 
         if earR > 0.1 {
-
             path.addCurve(
                 to: CGPoint(x: w, y: 0),
-                control1: CGPoint(x: w - earR, y: earR * 0.45),
-                control2: CGPoint(x: w - earR * 0.55, y: 0)
+                control1: CGPoint(x: w - earR, y: earR * earDrop),
+                control2: CGPoint(x: w - earR * earLead, y: 0)
             )
         }
 

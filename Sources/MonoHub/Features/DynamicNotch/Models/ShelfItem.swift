@@ -31,7 +31,7 @@ nonisolated struct ShelfItem: Identifiable, Sendable, Equatable {
                   let bytes = resources.fileSize {
             self.fileSizeString = Formatting.bytes(Int64(bytes))
         } else {
-            self.fileSizeString = isDir ? "Pasta" : "Item"
+            self.fileSizeString = isDir ? localized("Folder") : localized("Item")
         }
     }
 }

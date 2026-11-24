@@ -1,5 +1,4 @@
 import Foundation
-import Combine
 import Observation
 
 nonisolated struct NotchEngineDemand: Equatable, Sendable {
@@ -17,6 +16,8 @@ nonisolated struct NotchEngineDemand: Equatable, Sendable {
     var teleprompter = false
     var aiQuota = false
     var systemStats = false
+    var systemStatsBackground = false
+    var idleMonitor = false
 
     static let none = NotchEngineDemand()
 }
@@ -34,10 +35,6 @@ final class NotchPreferences {
 
     var customEnabledDisplayIDs: [String] {
         didSet { defaults.set(customEnabledDisplayIDs, forKey: "customEnabledDisplayIDs") }
-    }
-
-    var targetDisplayUUID: String {
-        didSet { defaults.set(targetDisplayUUID, forKey: "targetDisplayUUID") }
     }
 
     var enableVirtualNotch: Bool {
@@ -157,7 +154,10 @@ final class NotchPreferences {
     }
 
     var clipboardHistoryLimit: Int {
-        didSet { defaults.set(clipboardHistoryLimit, forKey: "clipboardHistoryLimit") }
+        didSet {
+            defaults.set(clipboardHistoryLimit, forKey: "clipboardHistoryLimit")
+            ClipboardManager.shared.enforceCapacityLimit()
+        }
     }
 
     var clipboardAutoPaste: Bool {
@@ -173,21 +173,15 @@ final class NotchPreferences {
     }
 
     var teleprompterSpeed: Double {
-        didSet {
-            defaults.set(teleprompterSpeed, forKey: "teleprompterSpeed")
-        }
+        didSet { defaults.set(teleprompterSpeed, forKey: "teleprompterSpeed") }
     }
 
     var teleprompterFontSize: Double {
-        didSet {
-            defaults.set(teleprompterFontSize, forKey: "teleprompterFontSize")
-        }
+        didSet { defaults.set(teleprompterFontSize, forKey: "teleprompterFontSize") }
     }
 
     var teleprompterShowFocusGuide: Bool {
-        didSet {
-            defaults.set(teleprompterShowFocusGuide, forKey: "teleprompterShowFocusGuide")
-        }
+        didSet { defaults.set(teleprompterShowFocusGuide, forKey: "teleprompterShowFocusGuide") }
     }
 
     var teleprompterKeepOpenWhilePlaying: Bool {
@@ -195,14 +189,7 @@ final class NotchPreferences {
     }
 
     var teleprompterIsMirrored: Bool {
-        didSet {
-            defaults.set(teleprompterIsMirrored, forKey: "teleprompterIsMirrored")
-        }
-    }
-
-    var teleprompterMirrorHorizontal: Bool {
-        get { teleprompterIsMirrored }
-        set { teleprompterIsMirrored = newValue }
+        didSet { defaults.set(teleprompterIsMirrored, forKey: "teleprompterIsMirrored") }
     }
 
     var enableSystemHUD: Bool {
@@ -247,10 +234,6 @@ final class NotchPreferences {
 
     var thermalAlertThreshold: Double {
         didSet { defaults.set(thermalAlertThreshold, forKey: "thermalAlertThreshold") }
-    }
-
-    var showClockWhenIdle: Bool {
-        didSet { defaults.set(showClockWhenIdle, forKey: "showClockWhenIdle") }
     }
 
     var hoverToExpand: Bool {
@@ -315,10 +298,6 @@ final class NotchPreferences {
 
     var bluetoothShowMacBattery: Bool {
         didSet { defaults.set(bluetoothShowMacBattery, forKey: "bluetoothShowMacBattery") }
-    }
-
-    var showBatteryWhenIdle: Bool {
-        didSet { defaults.set(showBatteryWhenIdle, forKey: "showBatteryWhenIdle") }
     }
 
     var liveActivityPriority: [LiveActivityKind] {
@@ -401,13 +380,8 @@ final class NotchPreferences {
         didSet { defaults.set(cameraIsMirrored, forKey: "cameraIsMirrored") }
     }
 
-    var idleAnimationStyle: NotchIdleAnimation {
-        didSet { defaults.set(idleAnimationStyle.rawValue, forKey: "idleAnimationStyle") }
-    }
-
     var idleAnimation: NotchIdleAnimation {
-        get { idleAnimationStyle }
-        set { idleAnimationStyle = newValue }
+        didSet { defaults.set(idleAnimation.rawValue, forKey: "idleAnimationStyle") }
     }
 
     var idleInteractionMode: NotchIdleInteractionMode {
@@ -444,14 +418,6 @@ final class NotchPreferences {
 
     var musicShowArtworkGlow: Bool {
         didSet { defaults.set(musicShowArtworkGlow, forKey: "musicShowArtworkGlow") }
-    }
-
-    var musicShowVolumeSlider: Bool {
-        didSet { defaults.set(musicShowVolumeSlider, forKey: "musicShowVolumeSlider") }
-    }
-
-    var musicShowAlbumTitle: Bool {
-        didSet { defaults.set(musicShowAlbumTitle, forKey: "musicShowAlbumTitle") }
     }
 
     var musicShowAudioRouteSelector: Bool {
@@ -492,14 +458,6 @@ final class NotchPreferences {
 
     static let defaultFocusBlockedApps = "com.apple.MobileSMS,com.apple.mail,com.tinyspeck.slackmacgap,com.hnc.Discord,ru.keepcoder.Telegram,net.whatsapp.WhatsApp"
 
-    var timerDefaultDuration: Double {
-        didSet { defaults.set(timerDefaultDuration, forKey: "timerDefaultDuration") }
-    }
-
-    var timerPlaySound: Bool {
-        didSet { defaults.set(timerPlaySound, forKey: "timerPlaySound") }
-    }
-
     var calendarShowAllDayEvents: Bool {
         didSet { defaults.set(calendarShowAllDayEvents, forKey: "calendarShowAllDayEvents") }
     }
@@ -508,28 +466,12 @@ final class NotchPreferences {
         didSet { defaults.set(calendarMaxEventsShown, forKey: "calendarMaxEventsShown") }
     }
 
-    var calendarShowLocation: Bool {
-        didSet { defaults.set(calendarShowLocation, forKey: "calendarShowLocation") }
-    }
-
-    var calendarLookaheadHours: Int {
-        didSet { defaults.set(calendarLookaheadHours, forKey: "calendarLookaheadHours") }
-    }
-
     var remindersShowCompleted: Bool {
         didSet { defaults.set(remindersShowCompleted, forKey: "remindersShowCompleted") }
     }
 
-    var remindersShowDueDate: Bool {
-        didSet { defaults.set(remindersShowDueDate, forKey: "remindersShowDueDate") }
-    }
-
     var remindersSortByPriority: Bool {
         didSet { defaults.set(remindersSortByPriority, forKey: "remindersSortByPriority") }
-    }
-
-    var remindersMaxItems: Int {
-        didSet { defaults.set(remindersMaxItems, forKey: "remindersMaxItems") }
     }
 
     var batteryShowThermalState: Bool {
@@ -540,28 +482,8 @@ final class NotchPreferences {
         didSet { defaults.set(batteryShowCycleAndCapacity, forKey: "batteryShowCycleAndCapacity") }
     }
 
-    var batteryLowThreshold: Int {
-        didSet { defaults.set(batteryLowThreshold, forKey: "batteryLowThreshold") }
-    }
-
-    var batteryShowDetailedMetrics: Bool {
-        didSet { defaults.set(batteryShowDetailedMetrics, forKey: "batteryShowDetailedMetrics") }
-    }
-
     var bluetoothHideDisconnected: Bool {
         didSet { defaults.set(bluetoothHideDisconnected, forKey: "bluetoothHideDisconnected") }
-    }
-
-    var bluetoothDefaultFilterConnected: Bool {
-        didSet { defaults.set(bluetoothDefaultFilterConnected, forKey: "bluetoothDefaultFilterConnected") }
-    }
-
-    var bluetoothShowTechnicalDetails: Bool {
-        didSet { defaults.set(bluetoothShowTechnicalDetails, forKey: "bluetoothShowTechnicalDetails") }
-    }
-
-    var shelfPersistItems: Bool {
-        didSet { defaults.set(shelfPersistItems, forKey: "shelfPersistItems") }
     }
 
     var shelfClickAction: ShelfClickAction {
@@ -572,16 +494,8 @@ final class NotchPreferences {
         didSet { defaults.set(shelfMaxItems, forKey: "shelfMaxItems") }
     }
 
-    var clipboardCaptureImages: Bool {
-        didSet { defaults.set(clipboardCaptureImages, forKey: "clipboardCaptureImages") }
-    }
-
-    var clipboardShowSourceApp: Bool {
-        didSet { defaults.set(clipboardShowSourceApp, forKey: "clipboardShowSourceApp") }
-    }
-
     var hasIdleContentEnabled: Bool {
-        idleAnimationStyle != .none
+        idleAnimation != .none
     }
 
     private(set) var tabTransitionDirection: CGFloat = 1
@@ -600,7 +514,6 @@ final class NotchPreferences {
 
         displayTargetMode = DisplayTargetMode(rawValue: defaults.string(forKey: "displayTargetMode") ?? "") ?? .allDisplays
         customEnabledDisplayIDs = defaults.stringArray(forKey: "customEnabledDisplayIDs") ?? []
-        targetDisplayUUID = defaults.string(forKey: "targetDisplayUUID") ?? "main"
         enableVirtualNotch = bool("enableVirtualNotch", true)
 
         closedNotchWidth = CGFloat(number("closedNotchWidth", 185))
@@ -654,7 +567,6 @@ final class NotchPreferences {
         showSystemAlertPeek = bool("showSystemAlertPeek", true)
         heavyProcessThreshold = number("heavyProcessThreshold", 70.0)
         thermalAlertThreshold = number("thermalAlertThreshold", 80.0)
-        showClockWhenIdle = bool("showClockWhenIdle", true)
 
         hoverToExpand = bool("hoverToExpand", true)
         hoverDelay = number("hoverDelay", 0.35)
@@ -674,7 +586,6 @@ final class NotchPreferences {
         homeGridSingleColumn = bool("homeGridSingleColumn", false)
 
         bluetoothShowMacBattery = bool("bluetoothShowMacBattery", false)
-        showBatteryWhenIdle = bool("showBatteryWhenIdle", false)
 
         liveActivityPriority = Self.normalized((defaults.stringArray(forKey: "liveActivityPriority") ?? []).compactMap(LiveActivityKind.init(rawValue:)))
         if defaults.object(forKey: "liveActivityLayout_v2") == nil {
@@ -705,7 +616,7 @@ final class NotchPreferences {
         cameraExposureBias = number("cameraExposureBias", 0.0)
         cameraIsMirrored = bool("cameraIsMirrored", true)
 
-        idleAnimationStyle = NotchIdleAnimation.fromStored(defaults.string(forKey: "idleAnimationStyle") ?? "")
+        idleAnimation = NotchIdleAnimation.fromStored(defaults.string(forKey: "idleAnimationStyle") ?? "")
         idleInteractionMode = NotchIdleInteractionMode(rawValue: defaults.string(forKey: "idleInteractionMode") ?? "") ?? .interactive
         idleWithActivityMode = NotchIdleWithActivityMode(rawValue: defaults.string(forKey: "idleWithActivityMode") ?? "") ?? .sideBySide
         idleAnimationSpeed = number("idleAnimationSpeed", 1.0)
@@ -716,46 +627,30 @@ final class NotchPreferences {
         musicShowVisualizer = bool("musicShowVisualizer", true)
         musicShowElapsedTimes = bool("musicShowElapsedTimes", true)
         musicShowArtworkGlow = bool("musicShowArtworkGlow", true)
-        musicShowVolumeSlider = bool("musicShowVolumeSlider", true)
-        musicShowAlbumTitle = bool("musicShowAlbumTitle", true)
         musicShowAudioRouteSelector = bool("musicShowAudioRouteSelector", true)
         musicEnableMicLevelMeter = bool("musicEnableMicLevelMeter", false)
 
         timerDefaultMinutes = defaults.object(forKey: "timerDefaultMinutes") == nil ? 5 : defaults.integer(forKey: "timerDefaultMinutes")
         timerPlayCompletionSound = bool("timerPlayCompletionSound", true)
-        timerDefaultDuration = number("timerDefaultDuration", 1500.0)
         focusModeEnabled = bool("focusModeEnabled", false)
         focusEnterShortcut = defaults.string(forKey: "focusEnterShortcut") ?? ""
         focusExitShortcut = defaults.string(forKey: "focusExitShortcut") ?? ""
         focusBlockDistractions = bool("focusBlockDistractions", false)
         focusBlockedApps = defaults.string(forKey: "focusBlockedApps") ?? Self.defaultFocusBlockedApps
-        timerPlaySound = bool("timerPlaySound", true)
 
         calendarShowAllDayEvents = bool("calendarShowAllDayEvents", true)
         calendarMaxEventsShown = defaults.object(forKey: "calendarMaxEventsShown") == nil ? 5 : defaults.integer(forKey: "calendarMaxEventsShown")
-        calendarShowLocation = bool("calendarShowLocation", true)
-        calendarLookaheadHours = defaults.object(forKey: "calendarLookaheadHours") == nil ? 36 : defaults.integer(forKey: "calendarLookaheadHours")
 
         remindersShowCompleted = bool("remindersShowCompleted", false)
-        remindersShowDueDate = bool("remindersShowDueDate", true)
         remindersSortByPriority = bool("remindersSortByPriority", true)
-        remindersMaxItems = defaults.object(forKey: "remindersMaxItems") == nil ? 25 : defaults.integer(forKey: "remindersMaxItems")
 
         batteryShowThermalState = bool("batteryShowThermalState", true)
         batteryShowCycleAndCapacity = bool("batteryShowCycleAndCapacity", true)
-        batteryLowThreshold = defaults.object(forKey: "batteryLowThreshold") == nil ? 20 : defaults.integer(forKey: "batteryLowThreshold")
-        batteryShowDetailedMetrics = bool("batteryShowDetailedMetrics", true)
 
         bluetoothHideDisconnected = bool("bluetoothHideDisconnected", false)
-        bluetoothDefaultFilterConnected = bool("bluetoothDefaultFilterConnected", false)
-        bluetoothShowTechnicalDetails = bool("bluetoothShowTechnicalDetails", true)
 
-        shelfPersistItems = bool("shelfPersistItems", true)
         shelfClickAction = ShelfClickAction(rawValue: defaults.string(forKey: "shelfClickAction") ?? "") ?? .openFile
         shelfMaxItems = defaults.object(forKey: "shelfMaxItems") == nil ? 12 : defaults.integer(forKey: "shelfMaxItems")
-
-        clipboardCaptureImages = bool("clipboardCaptureImages", true)
-        clipboardShowSourceApp = bool("clipboardShowSourceApp", true)
     }
 
     var availableTabs: [NotchTab] {
@@ -871,12 +766,15 @@ final class NotchPreferences {
     var engineDemand: NotchEngineDemand {
         let homeHeaderBattery = enableHomeModule && homeShowHeader && homeShowHeaderBattery
         let bluetoothMacBattery = enableBluetoothModule && bluetoothShowMacBattery
+        let systemMonitorEnabled = FeatureManager.shared.isEnabled(.systemMonitor)
+        let wantsSystemStatsBackground = systemMonitorEnabled && (showHeavyProcessLiveActivity || showSystemAlertPeek)
+        let wantsSystemStats = systemMonitorEnabled && (isHomeCardVisible(.heavyProcess) || wantsSystemStatsBackground)
         return NotchEngineDemand(
             media: enableMusicModule || isHomeCardVisible(.music) || showMusicLiveActivity,
             calendar: enableCalendarModule || isHomeCardVisible(.calendar) || showCalendarLiveActivity,
             reminders: enableRemindersModule,
             battery: enableBatteryModule || isHomeCardVisible(.battery) || showBatteryLiveActivity
-                || homeHeaderBattery || showBatteryWhenIdle || bluetoothMacBattery || enableSystemHUD,
+                || homeHeaderBattery || bluetoothMacBattery || enableSystemHUD,
             bluetooth: enableBluetoothModule || isHomeCardVisible(.bluetooth),
             timer: enableTimerModule || isHomeCardVisible(.timer),
             mirror: enableMirrorModule,
@@ -886,8 +784,9 @@ final class NotchPreferences {
             clipboard: enableClipboardModule || isHomeCardVisible(.clipboard),
             teleprompter: enableTeleprompterModule || isHomeCardVisible(.teleprompter),
             aiQuota: FeatureManager.shared.isEnabled(.aiQuota) && (isHomeCardVisible(.aiQuota) || showAIQuotaLiveActivity),
-            systemStats: FeatureManager.shared.isEnabled(.systemMonitor)
-                && (isHomeCardVisible(.heavyProcess) || showHeavyProcessLiveActivity)
+            systemStats: wantsSystemStats,
+            systemStatsBackground: wantsSystemStatsBackground,
+            idleMonitor: idleAnimation != .none
         )
     }
 
@@ -912,12 +811,12 @@ final class NotchPreferences {
                 return floor
             }
 
-            let cardH: CGFloat = 82
+            let cardH: CGFloat = 90
             let spacing: CGFloat = 10
             let rowCount: CGFloat = homeGridSingleColumn ? CGFloat(cardCount) : CGFloat((cardCount + 1) / 2)
             let cardsTotalH = (rowCount * cardH) + (max(0, rowCount - 1) * spacing)
             let computed = headerHeight + headerH + verticalPadding + cardsTotalH
-            return min(max(computed, floor), 440 + headerDelta)
+            return min(max(computed, floor), 492 + headerDelta)
 
         case .music:
             let base: CGFloat = musicShowAudioRouteSelector ? 248 : 195
@@ -1004,7 +903,6 @@ final class NotchPreferences {
     func resetToDefaults() {
         displayTargetMode = .allDisplays
         customEnabledDisplayIDs = []
-        targetDisplayUUID = "main"
         enableVirtualNotch = true
         closedNotchWidth = 185
         closedNotchHeight = 32
@@ -1028,7 +926,6 @@ final class NotchPreferences {
         homeShowHeaderClock = false
         homeGridSingleColumn = false
         bluetoothShowMacBattery = false
-        showBatteryWhenIdle = false
         enableMusicModule = true
         enableAudioModule = true
         enableTimerModule = true
@@ -1059,7 +956,6 @@ final class NotchPreferences {
         showBatteryLiveActivity = true
         showAIQuotaLiveActivity = true
         showHeavyProcessLiveActivity = true
-        showClockWhenIdle = true
         liveActivityPriority = LiveActivityKind.allCases
         liveActivityLayout = .combined
         showPausedTimerActivity = true
@@ -1084,7 +980,7 @@ final class NotchPreferences {
         cameraZoomFactor = 1.0
         cameraExposureBias = 0.0
         cameraIsMirrored = true
-        idleAnimationStyle = .bongoCat
+        idleAnimation = .bongoCat
         idleInteractionMode = .interactive
         idleWithActivityMode = .sideBySide
         idleAnimationSpeed = 1.0
@@ -1094,39 +990,24 @@ final class NotchPreferences {
         musicShowVisualizer = true
         musicShowElapsedTimes = true
         musicShowArtworkGlow = true
-        musicShowVolumeSlider = true
-        musicShowAlbumTitle = true
         musicShowAudioRouteSelector = true
         musicEnableMicLevelMeter = false
         timerDefaultMinutes = 5
         timerPlayCompletionSound = true
-        timerDefaultDuration = 1500.0
         focusModeEnabled = false
         focusEnterShortcut = ""
         focusExitShortcut = ""
         focusBlockDistractions = false
         focusBlockedApps = Self.defaultFocusBlockedApps
-        timerPlaySound = true
         calendarShowAllDayEvents = true
         calendarMaxEventsShown = 5
-        calendarShowLocation = true
-        calendarLookaheadHours = 36
         remindersShowCompleted = false
-        remindersShowDueDate = true
         remindersSortByPriority = true
-        remindersMaxItems = 25
         batteryShowThermalState = true
         batteryShowCycleAndCapacity = true
-        batteryLowThreshold = 20
-        batteryShowDetailedMetrics = true
         bluetoothHideDisconnected = false
-        bluetoothDefaultFilterConnected = false
-        bluetoothShowTechnicalDetails = true
-        shelfPersistItems = true
         shelfClickAction = .openFile
         shelfMaxItems = 12
-        clipboardCaptureImages = true
-        clipboardShowSourceApp = true
         hoverToExpand = true
         hoverDelay = 0.35
         autoCollapseDelay = 0.35

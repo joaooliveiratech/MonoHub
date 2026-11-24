@@ -35,9 +35,9 @@ struct DynamicNotchView: View {
                     title: localized("Notch Animations (Nerd & Interactive Mode)"),
                     subtitle: localized("Bongo Cat, Lord of the Rings, Samurai, Star Wars, Pokémon, Pac-Man and live activity split"),
                     badgeText: preferences.idleAnimation == .none ? localized("Disabled") : "\(preferences.idleAnimation.title) • \(preferences.idleInteractionMode.shortTitle)",
-                    badgeColor: preferences.idleAnimation.accentColor,
+                    badgeColor: preferences.idleAnimation.tint,
                     systemImage: preferences.idleAnimation == .none ? "sparkles" : preferences.idleAnimation.iconName,
-                    tint: preferences.idleAnimation == .none ? .purple : preferences.idleAnimation.accentColor,
+                    tint: preferences.idleAnimation == .none ? .purple : preferences.idleAnimation.tint,
                     isExpanded: $expandedSections.contains(.idleAnimations)
                 ) {
                     NotchIdleAnimationSection()

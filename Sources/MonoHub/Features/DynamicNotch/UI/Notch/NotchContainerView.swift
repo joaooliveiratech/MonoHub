@@ -9,6 +9,9 @@ struct NotchContainerView: View {
     let screen: NSScreen
     @Binding var isExpanded: Bool
 
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     @State private var languageRawValue: String = PreferencesManager.shared.language.rawValue
     @State private var isHovering: Bool = false
     @State private var hoverTask: Task<Void, Never>?
@@ -19,116 +22,14 @@ struct NotchContainerView: View {
         self._isExpanded = isExpanded
     }
 
-    private var geometry: ScreenNotchGeometry {
-        DisplayManager.calculateGeometry(for: screen, preferences: preferences)
-    }
-
-    private var closedMetrics: ClosedNotchMetrics {
-        center.metrics(for: geometry)
-    }
-
-    private var isHoverBounceActive: Bool {
-        isHovering && !isExpanded && preferences.dynamicIslandHoverBounce
-    }
-
-    private var currentWidth: CGFloat {
-        if isExpanded { return preferences.openNotchWidth }
-        return closedMetrics.width + (isHoverBounceActive ? 12 : 0)
-    }
-
-    private var effectiveHeaderHeight: CGFloat {
+    private func effectiveHeaderHeight(for geometry: ScreenNotchGeometry) -> CGFloat {
         if geometry.hasHardwareNotch && preferences.hardwareNotchTabBarStyle == .splitEars {
             return max(geometry.notchHeight, 36)
         }
         return geometry.expandedHeaderHeight
     }
 
-    private var expandedTargetHeight: CGFloat {
-        preferences.effectiveExpandedHeight(for: preferences.resolvedActiveTab, headerHeight: effectiveHeaderHeight)
-    }
-
-    private var currentHeight: CGFloat {
-        if isExpanded {
-            return expandedTargetHeight
-        }
-        return closedMetrics.height + (isHoverBounceActive ? 2 : 0)
-    }
-
-    private var isFlushWithHardwareNotch: Bool {
-        geometry.hasHardwareNotch && !isExpanded && !isHoverBounceActive && closedMetrics.width <= geometry.notchWidth + 2
-    }
-
-    private var topRadius: CGFloat {
-        isExpanded ? 0 : preferences.closedTopCornerRadius
-    }
-
-    private var bottomRadius: CGFloat {
-        if isExpanded { return preferences.openCornerRadius }
-        return center.isPeekEffective(for: center.peek) ? max(preferences.closedBottomCornerRadius, 18) : preferences.closedBottomCornerRadius
-    }
-
-    private var earRadius: CGFloat {
-        if isExpanded { return NotchTheme.expandedEarRadius }
-        return geometry.hasHardwareNotch ? preferences.closedTopCornerRadius : 0
-    }
-
-    private var shapeWidth: CGFloat {
-        currentWidth + earRadius * 2
-    }
-
-    private var currentAnimation: Animation {
-        isExpanded ? NotchTheme.expand : NotchTheme.collapse
-    }
-
-    private var showsBubble: Bool {
-        !isExpanded && closedMetrics.hasBubble && (center.secondary != nil || closedMetrics.hasAnimationBubble)
-    }
-
-    var body: some View {
-        ZStack(alignment: .top) {
-            notchBody
-                .overlay(alignment: .topTrailing) {
-                    if showsBubble {
-                        if closedMetrics.hasAnimationBubble {
-                            animationBubble
-                                .offset(x: closedMetrics.animationBubbleWidth + closedMetrics.bubbleSpacing - earRadius)
-                                .transition(
-                                    .asymmetric(
-                                        insertion: .scale(scale: 0.2, anchor: .leading).combined(with: .opacity),
-                                        removal: .scale(scale: 0.2, anchor: .leading).combined(with: .opacity)
-                                    )
-                                )
-                        } else if let secondary = center.secondary {
-                            bubble(for: secondary)
-                                .offset(x: closedMetrics.bubbleDiameter + closedMetrics.bubbleSpacing - earRadius)
-                                .transition(
-                                    .asymmetric(
-                                        insertion: .scale(scale: 0.2, anchor: .leading).combined(with: .opacity),
-                                        removal: .scale(scale: 0.2, anchor: .leading).combined(with: .opacity)
-                                    )
-                                )
-                        }
-                    }
-                }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .id(languageRawValue)
-        .onReceive(NotificationCenter.default.publisher(for: .appLanguageDidChange)) { _ in
-            languageRawValue = PreferencesManager.shared.language.rawValue
-        }
-        .animation(currentAnimation, value: isExpanded)
-        .animation(NotchTheme.activity, value: closedMetrics)
-        .animation(NotchTheme.activity, value: showsBubble)
-        .animation(NotchTheme.islandBounce, value: isHovering)
-        .animation(NotchTheme.content, value: preferences.resolvedActiveTab)
-        .animation(NotchTheme.content, value: expandedTargetHeight)
-    }
-
-    private var notchShape: NotchShape {
-        NotchShape(topCornerRadius: topRadius, bottomCornerRadius: bottomRadius, earRadius: earRadius)
-    }
-
-    private var ambientTint: Color {
+    private func ambientTint(isExpanded: Bool) -> Color {
         if isExpanded {
             return preferences.resolvedActiveTab.accentColor
         }
@@ -136,43 +37,174 @@ struct NotchContainerView: View {
             return primary.tint
         }
         if preferences.idleAnimation != .none {
-            return preferences.idleAnimation.accentColor
+            return preferences.idleAnimation.tint
         }
         return .clear
     }
 
-    private var notchBody: some View {
+    var body: some View {
+        let geometry = DisplayManager.calculateGeometry(for: screen, preferences: preferences)
+        let closedMetrics = center.metrics(for: geometry)
+        let hoverBounceActive = isHovering && !isExpanded && preferences.dynamicIslandHoverBounce
+        let headerHeight = effectiveHeaderHeight(for: geometry)
+        let expandedTargetHeight = preferences.effectiveExpandedHeight(
+            for: preferences.resolvedActiveTab,
+            headerHeight: headerHeight
+        )
+        let currentWidth: CGFloat = isExpanded
+            ? preferences.openNotchWidth
+            : closedMetrics.width + (hoverBounceActive ? 12 : 0)
+        let currentHeight: CGFloat = isExpanded
+            ? expandedTargetHeight
+            : closedMetrics.height + (hoverBounceActive ? 2 : 0)
+        let isFlushWithHardwareNotch = geometry.hasHardwareNotch
+            && !isExpanded
+            && !hoverBounceActive
+            && closedMetrics.width <= geometry.notchWidth + 2
+        let topRadius: CGFloat = isExpanded ? 0 : preferences.closedTopCornerRadius
+        let bottomRadius: CGFloat = isExpanded
+            ? preferences.openCornerRadius
+            : (center.isPeekEffective(for: center.peek) ? max(preferences.closedBottomCornerRadius, 18) : preferences.closedBottomCornerRadius)
+        let earRadius: CGFloat = isExpanded
+            ? NotchTheme.expandedEarRadius
+            : (geometry.hasHardwareNotch ? preferences.closedTopCornerRadius : 0)
+        let shapeWidth = currentWidth + earRadius * 2
+        let shape = NotchShape(topCornerRadius: topRadius, bottomCornerRadius: bottomRadius, earRadius: earRadius)
+        let showsBubble = !isExpanded && closedMetrics.hasBubble && (center.secondary != nil || closedMetrics.hasAnimationBubble)
+        let tint = ambientTint(isExpanded: isExpanded)
+        let morphAnimation = NotchTheme.motion(isExpanded ? NotchTheme.expand : NotchTheme.collapse, reduced: reduceMotion)
+        let activityAnimation = NotchTheme.motion(NotchTheme.activity, reduced: reduceMotion)
+
         ZStack(alignment: .top) {
-            notchShape
-                .fill(NotchTheme.notchFill)
-                .shadow(
-                    color: .black.opacity(preferences.showNotchShadow && !isFlushWithHardwareNotch ? (isExpanded ? 0.72 : (isHoverBounceActive ? 0.50 : 0.35)) : 0),
-                    radius: isExpanded ? 28 : (isHoverBounceActive ? 12 : 8),
-                    x: 0,
-                    y: isExpanded ? 14 : (isHoverBounceActive ? 5 : 3)
-                )
+            notchBody(
+                geometry: geometry,
+                closedMetrics: closedMetrics,
+                headerHeight: headerHeight,
+                expandedTargetHeight: expandedTargetHeight,
+                currentWidth: currentWidth,
+                currentHeight: currentHeight,
+                shapeWidth: shapeWidth,
+                shape: shape,
+                isFlushWithHardwareNotch: isFlushWithHardwareNotch,
+                hoverBounceActive: hoverBounceActive,
+                ambientTint: tint
+            )
+            .overlay(alignment: .topTrailing) {
+                if showsBubble {
+                    if closedMetrics.hasAnimationBubble {
+                        animationBubble(closedMetrics: closedMetrics)
+                            .offset(x: closedMetrics.animationBubbleWidth + closedMetrics.bubbleSpacing - earRadius)
+                            .transition(
+                                .asymmetric(
+                                    insertion: .scale(scale: 0.25, anchor: .leading).combined(with: .opacity),
+                                    removal: .scale(scale: 0.25, anchor: .leading).combined(with: .opacity)
+                                )
+                            )
+                    } else if let secondary = center.secondary {
+                        bubble(for: secondary, closedMetrics: closedMetrics)
+                            .offset(x: closedMetrics.bubbleDiameter + closedMetrics.bubbleSpacing - earRadius)
+                            .transition(
+                                .asymmetric(
+                                    insertion: .scale(scale: 0.25, anchor: .leading).combined(with: .opacity),
+                                    removal: .scale(scale: 0.25, anchor: .leading).combined(with: .opacity)
+                                )
+                            )
+                    }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .id(languageRawValue)
+        .onReceive(NotificationCenter.default.publisher(for: .appLanguageDidChange)) { _ in
+            languageRawValue = PreferencesManager.shared.language.rawValue
+        }
+        .animation(morphAnimation, value: isExpanded)
+        .animation(activityAnimation, value: closedMetrics)
+        .animation(NotchTheme.motion(NotchTheme.islandBounce, reduced: reduceMotion), value: hoverBounceActive)
+        .animation(NotchTheme.motion(NotchTheme.content, reduced: reduceMotion), value: expandedTargetHeight)
+    }
+
+    @ViewBuilder
+    private func notchBackground(
+        shape: NotchShape,
+        isFlushWithHardwareNotch: Bool,
+        hoverBounceActive: Bool,
+        ambientTint: Color
+    ) -> some View {
+        let shadowOpacity: Double = preferences.showNotchShadow && !isFlushWithHardwareNotch
+            ? (isExpanded ? 0.62 : (hoverBounceActive ? 0.44 : 0.32))
+            : 0
+
+        ZStack {
+            if isExpanded && !reduceTransparency {
+                // macOS 27 Liquid Glass dark obsidian backing: keeps true-black hardware notch blend
+                // at top while refracting desktop wallpaper subtly through the expanded card
+                shape
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                Color.black.opacity(0.94),
+                                Color.black.opacity(0.76)
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+                    .glassEffect(.regular.tint(.black.opacity(0.55)), in: shape)
+            } else {
+                shape.fill(NotchTheme.notchFill)
+            }
 
             if isExpanded {
-                notchShape
+                shape
                     .fill(
                         RadialGradient(
                             colors: [
-                                ambientTint.opacity(0.11),
-                                ambientTint.opacity(0.03),
+                                ambientTint.opacity(0.13),
+                                ambientTint.opacity(0.035),
                                 Color.clear
                             ],
                             center: .top,
-                            startRadius: 8,
-                            endRadius: 240
+                            startRadius: 10,
+                            endRadius: 260
                         )
                     )
                     .allowsHitTesting(false)
             }
+        }
+        .shadow(
+            color: .black.opacity(shadowOpacity),
+            radius: isExpanded ? 26 : (hoverBounceActive ? 12 : 7),
+            x: 0,
+            y: isExpanded ? 14 : (hoverBounceActive ? 5 : 3)
+        )
+    }
+
+    private func notchBody(
+        geometry: ScreenNotchGeometry,
+        closedMetrics: ClosedNotchMetrics,
+        headerHeight: CGFloat,
+        expandedTargetHeight: CGFloat,
+        currentWidth: CGFloat,
+        currentHeight: CGFloat,
+        shapeWidth: CGFloat,
+        shape: NotchShape,
+        isFlushWithHardwareNotch: Bool,
+        hoverBounceActive: Bool,
+        ambientTint: Color
+    ) -> some View {
+        ZStack(alignment: .top) {
+            notchBackground(
+                shape: shape,
+                isFlushWithHardwareNotch: isFlushWithHardwareNotch,
+                hoverBounceActive: hoverBounceActive,
+                ambientTint: ambientTint
+            )
 
             ZStack(alignment: .top) {
                 if isExpanded {
                     ExpandedNotchView(
-                        headerHeight: effectiveHeaderHeight,
+                        headerHeight: headerHeight,
                         physicalNotchHeight: geometry.notchHeight,
                         notchGap: geometry.expandedNotchGap,
                         width: preferences.openNotchWidth
@@ -188,7 +220,7 @@ struct NotchContainerView: View {
                         metrics: ClosedNotchMetrics(
                             width: currentWidth,
                             height: currentHeight,
-                            baseHeight: closedMetrics.baseHeight + (isHoverBounceActive ? 2 : 0),
+                            baseHeight: closedMetrics.baseHeight + (hoverBounceActive ? 2 : 0),
                             bubbleDiameter: closedMetrics.bubbleDiameter,
                             bubbleSpacing: closedMetrics.bubbleSpacing,
                             hasAnimationBubble: closedMetrics.hasAnimationBubble,
@@ -206,33 +238,33 @@ struct NotchContainerView: View {
                 }
             }
             .frame(width: shapeWidth, height: currentHeight, alignment: .top)
-            .clipShape(notchShape)
+            .clipShape(shape)
 
             if preferences.showNotchBorder && !isFlushWithHardwareNotch {
-                notchShape
+                shape
                     .stroke(
                         LinearGradient(
                             colors: [
-                                Color.white.opacity(isExpanded ? 0.22 : (isHoverBounceActive ? 0.22 : 0.12)),
-                                ambientTint.opacity(isExpanded ? 0.16 : 0.06),
-                                Color.white.opacity(isExpanded ? 0.08 : 0.03)
+                                Color.white.opacity(isExpanded ? 0.28 : (hoverBounceActive ? 0.24 : 0.14)),
+                                ambientTint.opacity(isExpanded ? 0.20 : 0.08),
+                                Color.white.opacity(isExpanded ? 0.11 : 0.04)
                             ],
                             startPoint: .top,
                             endPoint: .bottom
                         ),
-                        lineWidth: 1
+                        lineWidth: isExpanded ? 0.9 : 0.75
                     )
                     .allowsHitTesting(false)
             }
         }
         .frame(width: shapeWidth, height: currentHeight)
-        .contentShape(notchShape)
+        .contentShape(shape)
         .onHover { hovering in
             handleHover(hovering)
         }
         .onDrop(of: [.fileURL], isTargeted: nil) { providers in
             guard preferences.enableShelfModule else { return false }
-            withAnimation(NotchTheme.expand) {
+            withAnimation(NotchTheme.motion(NotchTheme.expand, reduced: reduceMotion)) {
                 preferences.selectTab(.shelf)
                 isExpanded = true
             }
@@ -263,16 +295,35 @@ struct NotchContainerView: View {
         )
     }
 
-    private func bubble(for kind: LiveActivityKind) -> some View {
-        let d = closedMetrics.bubbleDiameter
-        return ZStack {
-            Capsule(style: .continuous)
-                .fill(NotchTheme.notchFill)
-                .shadow(color: .black.opacity(preferences.showNotchShadow ? 0.3 : 0), radius: 6, y: 2)
-            if preferences.showNotchBorder {
-                Capsule(style: .continuous)
-                    .stroke(Color.white.opacity(0.08), lineWidth: 1)
+    @ViewBuilder
+    private func bubbleSurface<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        let capsule = Capsule(style: .continuous)
+        ZStack {
+            if reduceTransparency {
+                capsule.fill(NotchTheme.notchFill)
+            } else {
+                capsule
+                    .fill(Color.black.opacity(0.84))
+                    .glassEffect(.regular.tint(.black.opacity(0.60)), in: capsule)
             }
+            if preferences.showNotchBorder {
+                capsule.strokeBorder(
+                    LinearGradient(
+                        colors: [Color.white.opacity(0.22), Color.white.opacity(0.06)],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    ),
+                    lineWidth: 0.75
+                )
+            }
+            content()
+        }
+        .shadow(color: .black.opacity(preferences.showNotchShadow ? 0.34 : 0), radius: 7, y: 2.5)
+    }
+
+    private func bubble(for kind: LiveActivityKind, closedMetrics: ClosedNotchMetrics) -> some View {
+        let d = closedMetrics.bubbleDiameter
+        return bubbleSurface {
             LiveActivityMinimalView(kind: kind)
                 .id(kind)
                 .transition(.notchActivity)
@@ -287,17 +338,10 @@ struct NotchContainerView: View {
         }
     }
 
-    private var animationBubble: some View {
+    private func animationBubble(closedMetrics: ClosedNotchMetrics) -> some View {
         let w = closedMetrics.animationBubbleWidth
         let h = closedMetrics.bubbleDiameter
-        return ZStack {
-            Capsule(style: .continuous)
-                .fill(NotchTheme.notchFill)
-                .shadow(color: .black.opacity(preferences.showNotchShadow ? 0.3 : 0), radius: 6, y: 2)
-            if preferences.showNotchBorder {
-                Capsule(style: .continuous)
-                    .stroke(Color.white.opacity(0.08), lineWidth: 1)
-            }
+        return bubbleSurface {
             NotchIdleAnimationView(
                 animation: preferences.idleAnimation,
                 speed: preferences.idleAnimationSpeed,
@@ -320,14 +364,14 @@ struct NotchContainerView: View {
 
     private func expand() {
         center.dismissPeek()
-        withAnimation(NotchTheme.expand) {
+        withAnimation(NotchTheme.motion(NotchTheme.expand, reduced: reduceMotion)) {
             isExpanded = true
         }
     }
 
     private func collapse() {
         NotchWindowController.shared.navigationGraceUntil = nil
-        withAnimation(NotchTheme.collapse) {
+        withAnimation(NotchTheme.motion(NotchTheme.collapse, reduced: reduceMotion)) {
             isExpanded = false
         }
     }
@@ -338,7 +382,7 @@ struct NotchContainerView: View {
         let nextIdx = max(0, min(tabs.count - 1, currentIdx + step))
         guard nextIdx != currentIdx else { return }
         NotchHaptics.tap()
-        withAnimation(NotchTheme.content) {
+        withAnimation(NotchTheme.motion(NotchTheme.content, reduced: reduceMotion)) {
             preferences.selectTab(tabs[nextIdx])
         }
     }

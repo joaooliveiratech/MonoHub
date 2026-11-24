@@ -333,7 +333,6 @@ nonisolated enum PortugueseStrings {
         "Clear unpinned history": "Limpar histórico não fixado",
         "Click Edit to compose or insert a template.": "Clique em Editar para compor ou inserir um modelo.",
         "Click a shortcut and press the new combination. Esc cancels, Delete clears.": "Clique em um atalho e pressione a nova combinação. Esc cancela, Delete apaga.",
-        "Click any module or the Customize button to view its options. Use ↑↓ to reorder tabs.": "Clique em qualquer módulo ou no botão Personalizar para ver as opções. Use ↑↓ para reordenar abas.",
         "Click any section below to expand only what you want to configure.": "Clique em qualquer seção abaixo para expandir apenas o que deseja configurar.",
         "Click to record a new shortcut": "Clique para gravar um novo atalho",
         "Client Meeting": "Alinhamento com Cliente",
@@ -696,7 +695,6 @@ nonisolated enum PortugueseStrings {
         "Keeps live activity in the main notch and places animation in a floating side bubble.": "Mantém atividade ao vivo no entalhe principal e coloca animação em uma bolha lateral flutuante.",
         "Keeps notch unanimated when idle": "Mantém o notch sem animação em repouso",
         "Keyboard": "Teclado",
-        "Keyboard Brightness": "Brilho do Teclado",
         "Keyboard Shortcuts (?)": "Atalhos de Teclado (?)",
         "Keyboard Shortcuts…": "Atalhos de Teclado…",
         "Keyboard event tap and thumbnail cache.": "Event tap de teclado e cache de miniaturas.",
@@ -1307,7 +1305,6 @@ nonisolated enum PortugueseStrings {
         "Sync events with macOS Calendar": "Sincronizar eventos com o Calendário do macOS",
         "System": "Sistema",
         "System Audio": "Áudio do Sistema",
-        "System Sound Settings…": "Ajustes de Som do Sistema…",
         "System Clean": "Limpeza do Sistema",
         "System Monitor": "Monitor do Sistema",
         "System and User Logs": "Logs do Sistema e Usuário",
@@ -2169,6 +2166,13 @@ nonisolated enum PortugueseStrings {
         "Move cursor to focused window": "Mover cursor para a janela focada",
         "Centers the pointer on the target window after keyboard focus switches.": "Centraliza o ponteiro na janela de destino após trocar o foco pelo teclado.",
         "Current": "Atual",
-        "Last": "Última"
+        "Last": "Última",
+        "App Mixer": "Mixer de Apps",
+        "Devices & Mic": "Dispositivos & Mic",
+        "Folder": "Pasta",
+        "Restart script from beginning": "Reiniciar roteiro do início",
+        "Pause scrolling (Space)": "Pausar rolagem (Espaço)",
+        "Start auto-scroll (Space)": "Iniciar rolagem automática (Espaço)",
+        "Click any module or Customize to view its options. Drag the handle to reorder tabs.": "Clique em qualquer módulo ou em Personalizar para ver suas opções. Arraste o indicador para reordenar as abas."
     ]
 }

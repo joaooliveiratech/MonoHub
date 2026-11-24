@@ -10,22 +10,6 @@ struct NotchIdleAnimationView: View {
     var compactSingleWing: Bool = false
 
     init(
-        style: NotchIdleAnimation,
-        speedMultiplier: Double = 1.0,
-        hasHardwareNotch: Bool = false,
-        physicalNotchWidth: CGFloat = 185,
-        interactionMode: NotchIdleInteractionMode = NotchPreferences.shared.idleInteractionMode,
-        compactSingleWing: Bool = false
-    ) {
-        self.style = style
-        self.speedMultiplier = speedMultiplier
-        self.hasHardwareNotch = hasHardwareNotch
-        self.physicalNotchWidth = physicalNotchWidth
-        self.interactionMode = interactionMode
-        self.compactSingleWing = compactSingleWing
-    }
-
-    init(
         animation: NotchIdleAnimation,
         speed: Double = 1.0,
         hasHardwareNotch: Bool = false,

@@ -45,7 +45,7 @@ struct ExpandedNotchView: View {
     }
 
     private var usesUnifiedBelowNotchBar: Bool {
-        hasHardwareNotch && preferences.hardwareNotchTabBarStyle == .belowNotch && headerHeight >= physicalNotchHeight + 28
+        hasHardwareNotch && preferences.hardwareNotchTabBarStyle == .unifiedBelow && headerHeight >= physicalNotchHeight + 28
     }
 
     private var earWidth: CGFloat {
@@ -72,6 +72,20 @@ struct ExpandedNotchView: View {
         VStack(spacing: 0) {
             headerBar
                 .frame(height: headerHeight)
+
+            // Subtle macOS 27 optical hairline divider separating header chrome from module content
+            LinearGradient(
+                colors: [
+                    Color.clear,
+                    Color.white.opacity(0.10),
+                    Color.white.opacity(0.10),
+                    Color.clear
+                ],
+                startPoint: .leading,
+                endPoint: .trailing
+            )
+            .frame(height: 0.5)
+            .padding(.horizontal, NotchTheme.horizontalPadding)
 
             ZStack(alignment: .topLeading) {
                 tabContentView(for: selectedTab)
@@ -189,11 +203,13 @@ struct ExpandedNotchView: View {
 
     @ViewBuilder
     private var hardwareRightEarStatus: some View {
-        TimelineView(.everyMinute) { context in
-            Text(NotchFormatters.shortTime.string(from: context.date))
-                .font(.system(size: 10.5, weight: .semibold, design: .rounded))
-                .monospacedDigit()
-                .foregroundStyle(.white.opacity(0.55))
+        if !NotchWindowController.shared.isDisplayAsleep {
+            TimelineView(.everyMinute) { context in
+                Text(NotchFormatters.shortTime.string(from: context.date))
+                    .font(.system(size: 10.5, weight: .semibold, design: .rounded))
+                    .monospacedDigit()
+                    .foregroundStyle(.white.opacity(0.58))
+            }
         }
     }
 

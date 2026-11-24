@@ -20,7 +20,7 @@ struct NotchModulesSection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text(localized("Click any module or the Customize button to view its options. Use ↑↓ to reorder tabs."))
+                Text(localized("Click any module or Customize to view its options. Drag the handle to reorder tabs."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
 

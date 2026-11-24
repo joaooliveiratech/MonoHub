@@ -97,7 +97,7 @@ struct BatteryView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .notchModule()
+        .notchModule(alignment: .leading)
     }
 
     private func badgePill(title: String, icon: String, tint: Color) -> some View {

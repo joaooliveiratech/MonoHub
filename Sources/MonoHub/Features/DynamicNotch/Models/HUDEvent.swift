@@ -3,7 +3,6 @@ import Foundation
 enum HUDType: String, Sendable {
     case volume
     case brightness
-    case backlight
     case batteryCharging
     case micMute
     case micVolume
@@ -12,7 +11,6 @@ enum HUDType: String, Sendable {
         switch self {
         case .volume: return "speaker.wave.3.fill"
         case .brightness: return "sun.max.fill"
-        case .backlight: return "keyboard"
         case .batteryCharging: return "bolt.fill"
         case .micMute, .micVolume: return "mic.fill"
         }
@@ -22,7 +20,6 @@ enum HUDType: String, Sendable {
         switch self {
         case .volume: return localized("Volume")
         case .brightness: return localized("Brightness")
-        case .backlight: return localized("Keyboard Brightness")
         case .batteryCharging: return localized("Charging")
         case .micMute: return localized("Microphone")
         case .micVolume: return localized("Microphone Level")

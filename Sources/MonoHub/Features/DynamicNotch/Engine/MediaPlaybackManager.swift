@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import ImageIO
 import Observation
 
 nonisolated struct NowPlayingSnapshot: Sendable, Equatable {
@@ -435,8 +436,13 @@ final class MediaPlaybackManager {
     }
 
     func refreshIfStale() {
-        guard isRunning, Date().timeIntervalSince(lastSeenAt) > Self.staleInterval else { return }
+        guard isRunning, !NotchWindowController.shared.isDisplayAsleep, Date().timeIntervalSince(lastSeenAt) > Self.staleInterval else { return }
         scheduleRefresh(after: .zero)
+    }
+
+    func handleDisplayWake() {
+        guard isRunning else { return }
+        scheduleRefresh(after: .milliseconds(250))
     }
 
     func elapsed(at date: Date) -> TimeInterval {
@@ -501,7 +507,7 @@ final class MediaPlaybackManager {
     }
 
     func scheduleRefresh(after delay: Duration = .milliseconds(150)) {
-        guard isRunning else { return }
+        guard isRunning, !NotchWindowController.shared.isDisplayAsleep else { return }
         refreshTask?.cancel()
         refreshTask = Task { [weak self] in
             if delay > .zero {
@@ -638,9 +644,20 @@ final class MediaPlaybackManager {
             setArtwork(cached)
             return
         }
-        if let rawData, let image = Self.decodeImage(rawData) {
-            cacheArtwork(image, for: key)
-            setArtwork(image)
+        if let rawData {
+            artworkTask?.cancel()
+            artworkTask = Task { [weak self] in
+                let decoded = await Self.decodeDownsampledImage(rawData)
+                guard !Task.isCancelled, let self, self.isRunning else { return }
+                guard let image = decoded else {
+                    self.setArtwork(nil)
+                    return
+                }
+                self.cacheArtwork(image, for: key)
+                if Self.artworkKey(title: self.currentTrack.title, artist: self.currentTrack.artist) == key {
+                    self.setArtwork(image)
+                }
+            }
             return
         }
         setArtwork(nil)
@@ -649,7 +666,7 @@ final class MediaPlaybackManager {
         artworkTask = Task { [weak self] in
             let data = await MediaScriptRunner.shared.musicArtwork()
             guard !Task.isCancelled, let self, self.isRunning else { return }
-            guard let data, let image = Self.decodeImage(data) else {
+            guard let data, let image = await Self.decodeDownsampledImage(data) else {
                 self.artworkMisses.insert(key)
                 return
             }
@@ -676,16 +693,42 @@ final class MediaPlaybackManager {
         }
     }
 
+    @concurrent
+    nonisolated private static func decodeDownsampledImage(_ rawData: Data) async -> NSImage? {
+        decodeImage(rawData)
+    }
+
     nonisolated static func decodeImage(_ rawData: Data) -> NSImage? {
+        if let thumb = downsampleImageData(rawData, maxPixelSize: 256) {
+            return thumb
+        }
         if let image = NSImage(data: rawData) {
             return image
         }
         for magic in [Data([0xFF, 0xD8, 0xFF]), Data([0x89, 0x50, 0x4E, 0x47])] {
-            if let range = rawData.range(of: magic), let image = NSImage(data: rawData.subdata(in: range.lowerBound..<rawData.count)) {
-                return image
+            if let range = rawData.range(of: magic) {
+                let slice = rawData.subdata(in: range.lowerBound..<rawData.count)
+                if let thumb = downsampleImageData(slice, maxPixelSize: 256) {
+                    return thumb
+                }
+                if let image = NSImage(data: slice) {
+                    return image
+                }
             }
         }
         return nil
+    }
+
+    nonisolated private static func downsampleImageData(_ data: Data, maxPixelSize: Int) -> NSImage? {
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceThumbnailMaxPixelSize: maxPixelSize,
+            kCGImageSourceShouldCacheImmediately: true
+        ]
+        guard let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else { return nil }
+        return NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
     }
 
     func togglePlayPause() {

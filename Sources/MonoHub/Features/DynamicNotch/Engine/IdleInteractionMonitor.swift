@@ -4,21 +4,13 @@ import Foundation
 import Observation
 
 nonisolated struct IdleInteractionSnapshot: Equatable, Sendable {
-
     let phase: Double
-
     let ambientTime: Double
-
     let energy: Double
-
     let typingEnergy: Double
-
     let strokeCount: Int
-
     let isTypingNow: Bool
-
     let isActiveNow: Bool
-
     let isVisible: Bool
 }
 
@@ -46,6 +38,7 @@ final class IdleInteractionMonitor {
     @ObservationIgnored private var globalMonitor: Any?
     @ObservationIgnored private var localMouseMonitor: Any?
     @ObservationIgnored private var globalMouseMonitor: Any?
+    @ObservationIgnored private var powerStateObserver: (any NSObjectProtocol)?
     @ObservationIgnored private var idleTimer: Timer?
     @ObservationIgnored private var renderTimer: Timer?
     @ObservationIgnored private var currentRenderInterval: TimeInterval = 0
@@ -57,12 +50,50 @@ final class IdleInteractionMonitor {
 
     private init() {}
 
+    var hasInstalledEventMonitors: Bool {
+        localMonitor != nil || globalMonitor != nil || localMouseMonitor != nil || globalMouseMonitor != nil
+    }
+
     func ensureStarted() {
         guard !isMonitoring, !AppInfo.isRunningTests else { return }
         guard NotchPreferences.shared.idleAnimation != .none else { return }
         guard !NotchWindowController.shared.isDisplayAsleep, !AppExclusionManager.shared.isSuppressed else { return }
         isMonitoring = true
         lastTickTimestamp = Date().timeIntervalSinceReferenceDate
+
+        powerStateObserver = NotificationCenter.default.addObserver(
+            forName: Notification.Name.NSProcessInfoPowerStateDidChange,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.syncRenderTimer()
+            }
+        }
+
+        syncInteractionMonitors()
+        syncRenderTimer()
+    }
+
+    func syncInteractionMonitors() {
+        guard isMonitoring, !AppInfo.isRunningTests else {
+            removeEventMonitors()
+            return
+        }
+        let needsInputMonitors = NotchPreferences.shared.idleAnimation != .none
+            && NotchPreferences.shared.idleInteractionMode != .alwaysActive
+            && !NotchWindowController.shared.isDisplayAsleep
+            && !AppExclusionManager.shared.isSuppressed
+
+        if needsInputMonitors {
+            installEventMonitorsIfNeeded()
+        } else {
+            removeEventMonitors()
+        }
+    }
+
+    private func installEventMonitorsIfNeeded() {
+        guard localMonitor == nil else { return }
 
         localMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown]) { [weak self] event in
             MainActor.assumeIsolated {
@@ -91,7 +122,16 @@ final class IdleInteractionMonitor {
                 self?.recordMouseFromMonitor()
             }
         }
-        syncRenderTimer()
+    }
+
+    private func removeEventMonitors() {
+        for monitor in [localMonitor, globalMonitor, localMouseMonitor, globalMouseMonitor] {
+            if let monitor { NSEvent.removeMonitor(monitor) }
+        }
+        localMonitor = nil
+        globalMonitor = nil
+        localMouseMonitor = nil
+        globalMouseMonitor = nil
     }
 
     func stop() {
@@ -101,13 +141,11 @@ final class IdleInteractionMonitor {
         burstTask = nil
         cancelIdleTimer()
         stopRenderTimer()
-        for monitor in [localMonitor, globalMonitor, localMouseMonitor, globalMouseMonitor] {
-            if let monitor { NSEvent.removeMonitor(monitor) }
+        removeEventMonitors()
+        if let powerStateObserver {
+            NotificationCenter.default.removeObserver(powerStateObserver)
+            self.powerStateObserver = nil
         }
-        localMonitor = nil
-        globalMonitor = nil
-        localMouseMonitor = nil
-        globalMouseMonitor = nil
         energy = 0
         typingEnergy = 0
         if isInteracting { isInteracting = false }
@@ -139,7 +177,10 @@ final class IdleInteractionMonitor {
             stopRenderTimer()
             return
         }
-        let desiredInterval: TimeInterval = isInteracting ? 0.125 : 0.25
+        let lowPower = ProcessInfo.processInfo.isLowPowerModeEnabled
+        let desiredInterval: TimeInterval = isInteracting
+            ? (lowPower ? 0.18 : 0.125)
+            : (lowPower ? 0.36 : 0.25)
         if let timer = renderTimer, timer.isValid, abs(currentRenderInterval - desiredInterval) < 0.001 {
             return
         }
@@ -151,7 +192,7 @@ final class IdleInteractionMonitor {
                 self.tickDate = Date()
             }
         }
-        timer.tolerance = desiredInterval * 0.25
+        timer.tolerance = desiredInterval * 0.30
         RunLoop.main.add(timer, forMode: .common)
         renderTimer = timer
     }

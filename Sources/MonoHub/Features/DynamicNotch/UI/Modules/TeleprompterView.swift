@@ -493,7 +493,7 @@ struct TeleprompterView: View {
             }
             .buttonStyle(.plain)
             .fixedSize()
-            .help("Reiniciar roteiro do início")
+            .help(localized("Restart script from beginning"))
 
             Button {
                 NotchHaptics.tap()
@@ -508,7 +508,7 @@ struct TeleprompterView: View {
                         .font(.system(size: 10.5, weight: .bold, design: .monospaced))
                         .monospacedDigit()
                 }
-                .foregroundStyle(manager.isPlaying ? Color.black : Color.black)
+                .foregroundStyle(Color.black)
                 .padding(.horizontal, 10)
                 .frame(height: 26)
                 .background(
@@ -519,7 +519,7 @@ struct TeleprompterView: View {
             }
             .buttonStyle(.plain)
             .fixedSize()
-            .help(manager.isPlaying ? "Pausar rolagem (Espaço)" : "Iniciar rolagem automática (Espaço)")
+            .help(manager.isPlaying ? localized("Pause scrolling (Space)") : localized("Start auto-scroll (Space)"))
 
             scriptSelectorMenu
 

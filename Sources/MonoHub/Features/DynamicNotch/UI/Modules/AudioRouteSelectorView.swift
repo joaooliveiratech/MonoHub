@@ -6,7 +6,6 @@ enum ActiveAudioMenu: Equatable {
     case none
     case output
     case input
-    case voiceIsolation
 }
 
 struct AudioRouteBar: View {
@@ -63,8 +62,6 @@ struct AudioRouteBar: View {
             return 0
         case .input:
             return 32
-        case .voiceIsolation:
-            return 60
         }
     }
 
@@ -87,7 +84,6 @@ struct AudioRouteBar: View {
                     .foregroundStyle(.white.opacity(0.9))
                     .lineLimit(1)
                     .truncationMode(.tail)
-                    .frame(minWidth: 40, maxWidth: 125, alignment: .leading)
 
                 Image(systemName: "chevron.down")
                     .font(.system(size: 7, weight: .bold))
@@ -151,7 +147,6 @@ struct AudioRouteBar: View {
                         .foregroundStyle(deviceManager.isInputMuted ? Color.red.opacity(0.9) : .white.opacity(0.9))
                         .lineLimit(1)
                         .truncationMode(.tail)
-                        .frame(minWidth: 40, maxWidth: 115, alignment: .leading)
 
                     if deviceManager.isMicrophoneLocked {
                         Image(systemName: "lock.fill")
@@ -183,14 +178,13 @@ struct AudioRouteBar: View {
         .help(localized("Select Microphone & Toggle Mute"))
     }
 
-    private var isVoiceOpen: Bool { activeMenu == .voiceIsolation }
-
     private var voiceIsolationPill: some View {
         Button {
             NotchHaptics.tap()
             withAnimation(NotchTheme.content) {
-                activeMenu = (activeMenu == .voiceIsolation) ? .none : .voiceIsolation
+                activeMenu = .none
             }
+            deviceManager.showVoiceIsolationPicker()
         } label: {
             HStack(spacing: 3) {
                 Image(systemName: deviceManager.isVoiceIsolationActive ? "waveform.badge.mic" : "waveform")
@@ -209,11 +203,11 @@ struct AudioRouteBar: View {
             .frame(height: 24)
             .background(
                 Capsule()
-                    .fill(deviceManager.isVoiceIsolationActive ? Color.purple.opacity(0.18) : (isVoiceOpen ? Color.white.opacity(0.20) : Color.white.opacity(isHoveringVoice ? 0.14 : 0.08)))
+                    .fill(deviceManager.isVoiceIsolationActive ? Color.purple.opacity(0.18) : Color.white.opacity(isHoveringVoice ? 0.14 : 0.08))
             )
             .overlay(
                 Capsule()
-                    .strokeBorder(deviceManager.isVoiceIsolationActive ? Color.purple.opacity(0.4) : (isVoiceOpen ? Color.white.opacity(0.35) : Color.white.opacity(isHoveringVoice ? 0.22 : 0.12)), lineWidth: 0.5)
+                    .strokeBorder(deviceManager.isVoiceIsolationActive ? Color.purple.opacity(0.4) : Color.white.opacity(isHoveringVoice ? 0.22 : 0.12), lineWidth: 0.5)
             )
         }
         .buttonStyle(.plain)
@@ -429,97 +423,22 @@ struct AudioRouteBar: View {
                     .padding(.horizontal, 4)
                     .padding(.vertical, 2)
 
-                HStack(spacing: 5) {
-                    Text(localized("Microphone Mode").uppercased())
-                        .font(NotchTheme.eyebrow)
-                        .tracking(0.3)
-                        .foregroundStyle(.white.opacity(0.5))
-                    Spacer()
-                }
-                .padding(.horizontal, 8)
-                .padding(.top, 2)
-
-                AudioDropdownRow(
-                    title: localized("Standard"),
-                    iconName: "waveform",
-                    isSelected: deviceManager.preferredMicrophoneMode == .standard
-                ) {
-                    NotchHaptics.tap()
-                    deviceManager.showVoiceIsolationPicker()
-                    withAnimation(NotchTheme.content) { activeMenu = .none }
-                }
-
-                AudioDropdownRow(
-                    title: localized("Voice Isolation"),
-                    iconName: "waveform.badge.mic",
-                    isSelected: deviceManager.preferredMicrophoneMode == .voiceIsolation
-                ) {
-                    NotchHaptics.tap()
-                    deviceManager.showVoiceIsolationPicker()
-                    withAnimation(NotchTheme.content) { activeMenu = .none }
-                }
-
-                AudioDropdownRow(
-                    title: localized("Wide Spectrum"),
-                    iconName: "waveform.badge.plus",
-                    isSelected: deviceManager.preferredMicrophoneMode == .wideSpectrum
-                ) {
-                    NotchHaptics.tap()
-                    deviceManager.showVoiceIsolationPicker()
-                    withAnimation(NotchTheme.content) { activeMenu = .none }
-                }
-            }
-
-        case .voiceIsolation:
-            AudioDropdownCard(title: localized("Voice Isolation & Microphone Modes"), iconName: "waveform.badge.mic") {
-                AudioDropdownRow(
-                    title: localized("Standard"),
-                    iconName: "waveform",
-                    isSelected: deviceManager.preferredMicrophoneMode == .standard
-                ) {
-                    NotchHaptics.tap()
-                    deviceManager.showVoiceIsolationPicker()
-                    withAnimation(NotchTheme.content) { activeMenu = .none }
-                }
-
-                AudioDropdownRow(
-                    title: localized("Voice Isolation"),
-                    iconName: "waveform.badge.mic",
-                    isSelected: deviceManager.preferredMicrophoneMode == .voiceIsolation
-                ) {
-                    NotchHaptics.tap()
-                    deviceManager.showVoiceIsolationPicker()
-                    withAnimation(NotchTheme.content) { activeMenu = .none }
-                }
-
-                AudioDropdownRow(
-                    title: localized("Wide Spectrum"),
-                    iconName: "waveform.badge.plus",
-                    isSelected: deviceManager.preferredMicrophoneMode == .wideSpectrum
-                ) {
-                    NotchHaptics.tap()
-                    deviceManager.showVoiceIsolationPicker()
-                    withAnimation(NotchTheme.content) { activeMenu = .none }
-                }
-
-                Divider()
-                    .overlay(Color.white.opacity(0.10))
-                    .padding(.horizontal, 4)
-                    .padding(.vertical, 2)
-
                 Button {
                     NotchHaptics.tap()
                     deviceManager.showVoiceIsolationPicker()
                     withAnimation(NotchTheme.content) { activeMenu = .none }
                 } label: {
                     HStack(spacing: 6) {
-                        Image(systemName: "slider.horizontal.3")
+                        Image(systemName: deviceManager.isVoiceIsolationActive ? "waveform.badge.mic" : "waveform")
                             .font(.system(size: 10, weight: .semibold))
-                            .foregroundStyle(.white.opacity(0.7))
-                        Text(localized("System Sound Settings…"))
+                            .foregroundStyle(deviceManager.isVoiceIsolationActive ? Color.purple : .white.opacity(0.75))
+                        Text(localized("Microphone Mode"))
                             .font(.system(size: 10.5, weight: .medium))
-                            .foregroundStyle(.white.opacity(0.85))
+                            .foregroundStyle(.white.opacity(0.88))
                         Spacer()
+                        Text(currentMicrophoneModeTitle)
+                            .font(.system(size: 9.5, weight: .semibold, design: .rounded))
+                            .foregroundStyle(deviceManager.isVoiceIsolationActive ? Color.purple : .white.opacity(0.55))
                         Image(systemName: "arrow.up.forward.app")
                             .font(.system(size: 8, weight: .semibold))
                             .foregroundStyle(.white.opacity(0.4))
@@ -527,12 +446,20 @@ struct AudioRouteBar: View {
                     .padding(.horizontal, 8)
                     .padding(.vertical, 5)
                     .background(
-                        RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .fill(Color.white.opacity(0.04))
+                        RoundedRectangle(cornerRadius: 7, style: .continuous)
+                            .fill(Color.white.opacity(0.05))
                     )
                 }
                 .buttonStyle(.plain)
             }
+        }
+    }
+
+    private var currentMicrophoneModeTitle: String {
+        switch deviceManager.preferredMicrophoneMode {
+        case .voiceIsolation: return localized("Voice Isolation")
+        case .wideSpectrum: return localized("Wide Spectrum")
+        default: return localized("Standard")
         }
     }
 }
@@ -543,7 +470,10 @@ struct AudioDropdownCard<Content: View>: View {
     var maxCardHeight: CGFloat = 170
     @ViewBuilder let content: () -> Content
 
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+
     var body: some View {
+        let shape = RoundedRectangle(cornerRadius: 14, style: .continuous)
         VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 5) {
                 Image(systemName: iconName)
@@ -583,26 +513,30 @@ struct AudioDropdownCard<Content: View>: View {
         .frame(width: 278)
         .frame(maxHeight: maxCardHeight)
         .fixedSize(horizontal: false, vertical: true)
-        .background(
-            RoundedRectangle(cornerRadius: 13, style: .continuous)
-                .fill(Color(red: 0.10, green: 0.10, blue: 0.12).opacity(0.98))
-        )
+        .background {
+            if reduceTransparency {
+                shape.fill(Color(red: 0.09, green: 0.09, blue: 0.11).opacity(0.98))
+            } else {
+                shape
+                    .fill(Color.black.opacity(0.76))
+                    .glassEffect(.regular.tint(.black.opacity(0.62)), in: shape)
+            }
+        }
         .overlay(
-            RoundedRectangle(cornerRadius: 13, style: .continuous)
-                .strokeBorder(
-                    LinearGradient(
-                        colors: [
-                            Color.white.opacity(0.24),
-                            Color.white.opacity(0.08)
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    ),
-                    lineWidth: 0.75
-                )
+            shape.strokeBorder(
+                LinearGradient(
+                    colors: [
+                        Color.white.opacity(0.28),
+                        Color.white.opacity(0.08)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                ),
+                lineWidth: 0.75
+            )
         )
-        .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
-        .shadow(color: .black.opacity(0.62), radius: 14, x: 0, y: 6)
+        .clipShape(shape)
+        .shadow(color: .black.opacity(0.58), radius: 14, x: 0, y: 6)
     }
 }
 

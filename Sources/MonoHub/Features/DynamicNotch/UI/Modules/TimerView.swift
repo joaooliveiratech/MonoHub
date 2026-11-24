@@ -2,6 +2,7 @@ import SwiftUI
 
 struct TimerView: View {
     private let timerManager = TimerManager.shared
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var pulseCircle = false
 
     init() {}
@@ -53,7 +54,7 @@ struct TimerView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .notchModule()
+        .notchModule(alignment: .leading)
     }
 
     private var progressRingView: some View {
@@ -103,7 +104,7 @@ struct TimerView: View {
         }()
 
         return ZStack {
-            if timerManager.isCompleted {
+            if timerManager.isCompleted && !reduceMotion && !NotchWindowController.shared.isDisplayAsleep {
                 Circle()
                     .stroke(accent.opacity(0.85), lineWidth: 3)
                     .frame(width: 104, height: 104)
@@ -333,23 +334,21 @@ struct TimerView: View {
 
     private var stopwatchControlsView: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 12) {
+            HStack(spacing: 10) {
                 Button {
                     NotchHaptics.tap()
                     timerManager.toggleStartPause()
                 } label: {
                     HStack(spacing: 6) {
                         Image(systemName: timerManager.model.isRunning ? "pause.fill" : "play.fill")
+                            .contentTransition(.symbolEffect(.replace))
                         Text(timerManager.model.isRunning ? localized("Pause") : localized("Start"))
                     }
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.black)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 7)
-                    .background(Capsule().fill(timerManager.model.isRunning ? Color.orange : Color.green))
-                    .contentShape(Capsule())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(NotchPrimaryButtonStyle(
+                    tint: timerManager.model.isRunning ? .orange : .mint,
+                    foreground: .black
+                ))
 
                 if timerManager.model.isRunning {
                     Button {
@@ -360,14 +359,8 @@ struct TimerView: View {
                             Image(systemName: "flag.fill")
                             Text(localized("Lap"))
                         }
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 7)
-                        .background(Capsule().fill(Color.white.opacity(0.15)))
-                        .contentShape(Capsule())
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(NotchSecondaryButtonStyle())
                 }
 
                 Button {
@@ -378,14 +371,8 @@ struct TimerView: View {
                         Image(systemName: "arrow.counterclockwise")
                         Text(localized("Reset"))
                     }
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.8))
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 7)
-                    .background(Capsule().fill(Color.white.opacity(0.12)))
-                    .contentShape(Capsule())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(NotchSecondaryButtonStyle())
             }
 
             if !timerManager.laps.isEmpty {
