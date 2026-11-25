@@ -160,20 +160,19 @@ struct PortsView: View {
             await reload()
 
             while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 1_000_000_000)
+                let pollSeconds: Double = ProcessInfo.processInfo.isLowPowerModeEnabled ? 4 : 2
+                try? await Task.sleep(for: .seconds(pollSeconds))
                 guard !Task.isCancelled else { break }
                 let snapshot = await engine.sampleBandwidth()
-                await MainActor.run {
-                    self.currentSnapshot = snapshot
-                    self.items = self.engine.updateBandwidth(for: self.items)
-                }
+                self.currentSnapshot = snapshot
+                self.items = self.engine.updateBandwidth(for: self.items)
             }
         }
         .onDisappear {
             ProcessBandwidthEngine.shared.stop()
         }
         .confirmationDialog(
-            processToTerminate != nil ? localized("Terminate process “%@” (PID %d)?", processToTerminate!.processName, processToTerminate!.pid) : "",
+            processToTerminate.map { localized("Terminate process “%@” (PID %d)?", $0.processName, $0.pid) } ?? "",
             isPresented: $showTerminateConfirmation,
             titleVisibility: .visible
         ) {
@@ -222,11 +221,12 @@ struct PortsView: View {
                         .font(.system(size: 13))
                     Text(Formatting.speed(currentSnapshot.totalDownloadSpeed))
                         .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                        .contentTransition(.numericText())
                         .foregroundStyle(.primary)
                 }
-                .padding(.horizontal, 8)
+                .padding(.horizontal, 9)
                 .padding(.vertical, 4)
-                .background(.blue.opacity(0.1), in: RoundedRectangle(cornerRadius: 6))
+                .background(.blue.opacity(0.1), in: Capsule())
                 .help(localized("Total Real-Time Download Rate"))
 
                 HStack(spacing: 5) {
@@ -235,11 +235,12 @@ struct PortsView: View {
                         .font(.system(size: 13))
                     Text(Formatting.speed(currentSnapshot.totalUploadSpeed))
                         .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                        .contentTransition(.numericText())
                         .foregroundStyle(.primary)
                 }
-                .padding(.horizontal, 8)
+                .padding(.horizontal, 9)
                 .padding(.vertical, 4)
-                .background(.orange.opacity(0.1), in: RoundedRectangle(cornerRadius: 6))
+                .background(.orange.opacity(0.1), in: Capsule())
                 .help(localized("Total Real-Time Upload Rate"))
 
                 if let topName = currentSnapshot.topConsumerName, currentSnapshot.topConsumerSpeed > 0 {

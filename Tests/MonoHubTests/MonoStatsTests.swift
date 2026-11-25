@@ -464,4 +464,37 @@ struct MonoStatsTests {
         #expect(engine.currentRequest.isEmpty)
         engine.setDashboardMonitoring(active: false)
     }
+
+    @Test("Sampler stretches cadence under Low Power Mode and thermal pressure when idle")
+    func samplerAdaptiveCadence() {
+        #expect(Sampler.effectiveInterval(base: 2, lowPower: false, thermalState: .nominal, isInteractive: false) == 2)
+        #expect(Sampler.effectiveInterval(base: 2, lowPower: true, thermalState: .nominal, isInteractive: false) == 4)
+        #expect(Sampler.effectiveInterval(base: 2, lowPower: false, thermalState: .serious, isInteractive: false) == 3)
+        #expect(Sampler.effectiveInterval(base: 2, lowPower: true, thermalState: .critical, isInteractive: false) == 6)
+        #expect(Sampler.effectiveInterval(base: 2, lowPower: true, thermalState: .critical, isInteractive: true) == 2)
+        #expect(Sampler.effectiveInterval(base: 10, lowPower: true, thermalState: .critical, isInteractive: false) == Sampler.maximumAdaptiveInterval)
+    }
+
+    @Test("SensorsReader quick subset is deterministic and evenly distributed")
+    func sensorsQuickSubset() {
+        #expect(SensorsReader.quickSubsetIndices(count: 0, sampleCount: 4) == [])
+        #expect(SensorsReader.quickSubsetIndices(count: 3, sampleCount: 4) == [0, 1, 2])
+        let indices = SensorsReader.quickSubsetIndices(count: 16, sampleCount: 4)
+        #expect(indices.count == 4)
+        #expect(indices == SensorsReader.quickSubsetIndices(count: 16, sampleCount: 4))
+        #expect(Set(indices).count == 4)
+        #expect(indices == indices.sorted())
+    }
+
+    @Test("PortsEngine disambiguates duplicate socket rows with unique IDs")
+    func portsDuplicateIDs() {
+        let output = """
+        COMMAND   PID USER   FD   TYPE             DEVICE SIZE/OFF NODE NAME
+        node     1234 joao   20u  IPv4 0x1111111111111111      0t0  TCP 127.0.0.1:3000 (LISTEN)
+        node     1234 joao   21u  IPv4 0x2222222222222222      0t0  TCP 127.0.0.1:3000 (LISTEN)
+        """
+        let items = PortsEngine.parseLsofOutput(output)
+        #expect(items.count == 2)
+        #expect(Set(items.map(\.id)).count == 2)
+    }
 }

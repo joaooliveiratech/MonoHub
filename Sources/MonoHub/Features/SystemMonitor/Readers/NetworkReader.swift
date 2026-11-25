@@ -84,23 +84,36 @@ nonisolated final class NetworkReader {
 
     private func readCounters(into counters: inout [UInt16: InterfaceCounters]) -> Bool {
         var mib: (Int32, Int32, Int32, Int32, Int32, Int32) = (CTL_NET, PF_ROUTE, 0, 0, NET_RT_IFLIST2, 0)
-        var length = 0
-        let sized = withUnsafeMutablePointer(to: &mib) { pointer in
-            pointer.withMemoryRebound(to: Int32.self, capacity: 6) { sysctl($0, 6, nil, &length, nil, 0) }
+        // Reuse the previous buffer and only fall back to the sizing round trip when the
+        // interface table outgrew it, so the steady state costs a single sysctl per tick.
+        var length = routeBuffer.count
+        var status: Int32 = -1
+        if length > 0 {
+            status = routeBuffer.withUnsafeMutableBytes { raw in
+                withUnsafeMutablePointer(to: &mib) { pointer in
+                    pointer.withMemoryRebound(to: Int32.self, capacity: 6) { sysctl($0, 6, raw.baseAddress, &length, nil, 0) }
+                }
+            }
         }
-        guard sized == 0, length > 0 else { return false }
-        if routeBuffer.count < length {
+        if status != 0 {
+            length = 0
+            let sized = withUnsafeMutablePointer(to: &mib) { pointer in
+                pointer.withMemoryRebound(to: Int32.self, capacity: 6) { sysctl($0, 6, nil, &length, nil, 0) }
+            }
+            guard sized == 0, length > 0 else { return false }
             routeBuffer = [UInt8](repeating: 0, count: length + 4_096)
-        }
-
-        length = routeBuffer.count
-        counters.removeAll(keepingCapacity: true)
-        return routeBuffer.withUnsafeMutableBytes { raw -> Bool in
-            guard let base = raw.baseAddress else { return false }
-            let status = withUnsafeMutablePointer(to: &mib) { pointer in
-                pointer.withMemoryRebound(to: Int32.self, capacity: 6) { sysctl($0, 6, base, &length, nil, 0) }
+            length = routeBuffer.count
+            status = routeBuffer.withUnsafeMutableBytes { raw in
+                withUnsafeMutablePointer(to: &mib) { pointer in
+                    pointer.withMemoryRebound(to: Int32.self, capacity: 6) { sysctl($0, 6, raw.baseAddress, &length, nil, 0) }
+                }
             }
             guard status == 0 else { return false }
+        }
+
+        counters.removeAll(keepingCapacity: true)
+        return routeBuffer.withUnsafeBytes { raw -> Bool in
+            guard let base = raw.baseAddress else { return false }
             var offset = 0
             while offset + MemoryLayout<if_msghdr>.size <= length {
                 let header = base.loadUnaligned(fromByteOffset: offset, as: if_msghdr.self)

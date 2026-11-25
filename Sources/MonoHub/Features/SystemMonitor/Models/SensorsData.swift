@@ -11,11 +11,11 @@ nonisolated struct SensorsData: Sendable, Equatable {
 
     var thermalDescription: String {
         switch thermalState {
-        case .nominal: return "Normal"
+        case .nominal: return localized("Normal")
         case .fair: return localized("Fair")
         case .serious: return localized("Serious")
         case .critical: return localized("Critical")
-        @unknown default: return "Normal"
+        @unknown default: return localized("Normal")
         }
     }
 

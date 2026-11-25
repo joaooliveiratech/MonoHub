@@ -123,9 +123,9 @@ nonisolated enum DisplayStyle: String, CaseIterable, Identifiable, Codable, Send
 
     var sfSymbol: String {
         switch self {
-        case .combined: return "chart.bar.xaxis"
+        case .combined: return "gauge.with.needle"
         case .stacked: return "text.alignleft"
-        case .icon: return "square.grid.2x2"
+        case .icon: return "speedometer"
         case .bar: return "chart.bar.fill"
         case .text: return "textformat"
         case .batteryInside: return "battery.100percent"

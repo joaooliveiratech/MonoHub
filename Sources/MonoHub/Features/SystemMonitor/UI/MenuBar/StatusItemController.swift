@@ -23,7 +23,7 @@ final class StatusItemController: NSObject {
     private var panelModule: ModuleType?
     private var lastDismissal: (module: ModuleType, time: TimeInterval)?
     private var globalClickMonitor: Any?
-    private var panelObservers: [any NSObjectProtocol] = []
+    private var panelObservers: [(center: NotificationCenter, token: any NSObjectProtocol)] = []
     private var occlusionObservers: [any NSObjectProtocol] = []
     private var screenObserver: (any NSObjectProtocol)?
     private var preferencesGeneration = 0
@@ -285,19 +285,27 @@ final class StatusItemController: NSObject {
             }
         }
 
+        let defaultCenter = NotificationCenter.default
+        let workspaceCenter = NSWorkspace.shared.notificationCenter
         panelObservers = [
-            NotificationCenter.default.addObserver(forName: NSWindow.didResignKeyNotification, object: panel, queue: .main) { _ in
-                MainActor.assumeIsolated {
-                    let controller = StatusItemController.shared
-                    guard !controller.isMouseDownOnStatusItem() else { return }
-                    controller.closePanel(animated: true)
+            (
+                defaultCenter,
+                defaultCenter.addObserver(forName: NSWindow.didResignKeyNotification, object: panel, queue: .main) { _ in
+                    MainActor.assumeIsolated {
+                        let controller = StatusItemController.shared
+                        guard !controller.isMouseDownOnStatusItem() else { return }
+                        controller.closePanel(animated: true)
+                    }
                 }
-            },
-            NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.activeSpaceDidChangeNotification, object: nil, queue: .main) { _ in
-                MainActor.assumeIsolated {
-                    StatusItemController.shared.closePanel(animated: false)
+            ),
+            (
+                workspaceCenter,
+                workspaceCenter.addObserver(forName: NSWorkspace.activeSpaceDidChangeNotification, object: nil, queue: .main) { _ in
+                    MainActor.assumeIsolated {
+                        StatusItemController.shared.closePanel(animated: false)
+                    }
                 }
-            }
+            )
         ]
     }
 
@@ -307,8 +315,7 @@ final class StatusItemController: NSObject {
         }
         globalClickMonitor = nil
         for observer in panelObservers {
-            NotificationCenter.default.removeObserver(observer)
-            NSWorkspace.shared.notificationCenter.removeObserver(observer)
+            observer.center.removeObserver(observer.token)
         }
         panelObservers.removeAll()
     }
@@ -453,7 +460,7 @@ struct ContextMenuBuilder {
         settings.keyEquivalent = ","
         menu.addItem(settings)
 
-        let login = item(localized("Open at Login"), symbol: "power", action: #selector(StatusItemController.toggleLaunchAtLogin), object: nil)
+        let login = item(localized("Open at Login"), symbol: "arrow.up.circle", action: #selector(StatusItemController.toggleLaunchAtLogin), object: nil)
         login.state = PreferencesManager.shared.launchAtLogin ? .on : .off
         menu.addItem(login)
 
@@ -461,7 +468,7 @@ struct ContextMenuBuilder {
 
         menu.addItem(.separator())
 
-        let quit = item(localized("Quit MonoHub"), symbol: "xmark.rectangle", action: #selector(StatusItemController.quit), object: nil)
+        let quit = item(localized("Quit MonoHub"), symbol: "rectangle.portrait.and.arrow.right", action: #selector(StatusItemController.quit), object: nil)
         quit.keyEquivalent = "q"
         menu.addItem(quit)
 

@@ -9,9 +9,9 @@ import SwiftUI
 struct ModelTests {
     @Test("AppInfo version and build metadata are valid")
     func appInfoMetadata() {
-        #expect(AppInfo.version == "0.17.7")
-        #expect(AppInfo.build == "63")
-        #expect(AppInfo.fullVersionString == "0.17.7 (63)")
+        #expect(AppInfo.version == "0.17.8")
+        #expect(AppInfo.build == "64")
+        #expect(AppInfo.fullVersionString == "0.17.8 (64)")
         #expect(AppInfo.bundleIdentifier == "com.antigravity.monohub")
     }
 

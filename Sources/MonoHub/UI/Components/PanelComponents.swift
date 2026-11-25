@@ -56,12 +56,14 @@ struct Platter<Content: View>: View {
     @ViewBuilder let content: Content
 
     var body: some View {
+        let shape = RoundedRectangle(cornerRadius: 12, style: .continuous)
         VStack(alignment: .leading, spacing: 0) {
             content
         }
         .padding(padding)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .background(Color.primary.opacity(0.05), in: shape)
+        .overlay(shape.strokeBorder(Color.primary.opacity(0.07), lineWidth: 0.5))
     }
 }
 
@@ -102,6 +104,7 @@ struct StatTile: View {
     var tint: Color = .secondary
 
     var body: some View {
+        let shape = RoundedRectangle(cornerRadius: 12, style: .continuous)
         VStack(alignment: .leading, spacing: 3) {
             HStack(spacing: 5) {
                 Circle()
@@ -129,7 +132,8 @@ struct StatTile: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .background(Color.primary.opacity(0.05), in: shape)
+        .overlay(shape.strokeBorder(Color.primary.opacity(0.07), lineWidth: 0.5))
     }
 }
 

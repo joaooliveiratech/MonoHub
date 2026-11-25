@@ -12,6 +12,13 @@ nonisolated final class CPUReader {
     private var lastCoreUsages: [Double] = []
     private var history = RollingHistory()
 
+    init() {
+        // Prime the tick baselines so the first visible sample reflects the last
+        // interval instead of the average since boot.
+        _ = readHostUsage()
+        _ = readCoreUsages()
+    }
+
     func read(detailed: Bool = true) -> CPUData {
         let usage = readHostUsage()
         history.append(usage.total)

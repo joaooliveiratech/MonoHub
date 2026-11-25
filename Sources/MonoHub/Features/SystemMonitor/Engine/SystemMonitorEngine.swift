@@ -50,6 +50,7 @@ final class SystemMonitorEngine {
     @ObservationIgnored private var distributedObservers: [any NSObjectProtocol] = []
     @ObservationIgnored private var powerSourceLoop: CFRunLoopSource?
     @ObservationIgnored private var policyTask: Task<Void, Never>?
+    @ObservationIgnored private var accessoryTask: Task<Void, Never>?
     @ObservationIgnored private let accessoryReader = AccessoryBatteryReader()
     @ObservationIgnored private var accessories: [ConnectedDeviceBattery] = []
     @ObservationIgnored private var lastAccessoryRead: Date = .distantPast
@@ -106,6 +107,8 @@ final class SystemMonitorEngine {
         unregisterObservers()
         policyTask?.cancel()
         policyTask = nil
+        accessoryTask?.cancel()
+        accessoryTask = nil
 
         request = SampleRequest()
         isSampling = false
@@ -167,7 +170,7 @@ final class SystemMonitorEngine {
         windowMonitoringActive = active
         windowFocusedModule = focus
         if active, focus == .battery || focus == nil {
-            refreshAccessories(force: true)
+            scheduleAccessoryRefresh()
         }
         reloadConfiguration()
     }
@@ -196,7 +199,7 @@ final class SystemMonitorEngine {
         guard detailedModule != module else { return }
         detailedModule = module
         if module == .battery {
-            refreshAccessories(force: true)
+            scheduleAccessoryRefresh()
         }
         reloadConfiguration()
     }
@@ -325,7 +328,14 @@ final class SystemMonitorEngine {
         let hasWindowAudience = isFeatureEnabled && (detailedModule != nil || ((windowMonitoringActive || dashboardMonitoringActive) && windowVisible))
         let hasNotchAudience = isFeatureEnabled && notchAudience && !NotchWindowController.shared.isDisplayAsleep && !AppExclusionManager.shared.isSuppressed
         let running = isFeatureEnabled && !pauseForSleep && !request.isEmpty && (hasMenuBarAudience || hasWindowAudience || hasNotchAudience)
-        sampler.configure(interval: prefs.refreshInterval, running: running)
+        let processInfo = ProcessInfo.processInfo
+        let interval = Sampler.effectiveInterval(
+            base: prefs.refreshInterval,
+            lowPower: processInfo.isLowPowerModeEnabled,
+            thermalState: processInfo.thermalState,
+            isInteractive: hasWindowAudience
+        )
+        sampler.configure(interval: interval, running: running)
         let resumed = running && !isSampling
         isSampling = running
         if resumed {
@@ -425,6 +435,22 @@ final class SystemMonitorEngine {
         accessories = accessoryReader.read()
     }
 
+    /// IOBluetooth queries talk to bluetoothd over XPC; deferring them to the next
+    /// main-loop turn lets the panel or window appear before the round trip happens.
+    private func scheduleAccessoryRefresh() {
+        accessoryTask?.cancel()
+        accessoryTask = Task { @MainActor [weak self] in
+            await Task.yield()
+            guard let self, !Task.isCancelled else { return }
+            refreshAccessories(force: true)
+            if batteryData.connectedDevices != accessories {
+                var updated = batteryData
+                updated.connectedDevices = accessories
+                batteryData = updated
+            }
+        }
+    }
+
     private func refreshPowerPolicies() {
         policyTask?.cancel()
         let token = generation
@@ -483,10 +509,25 @@ final class SystemMonitorEngine {
             queue: .main
         ) { _ in
             MainActor.assumeIsolated {
-                SystemMonitorEngine.shared.powerSourceDidChange()
+                let engine = SystemMonitorEngine.shared
+                engine.powerSourceDidChange()
+                engine.updateRunningState()
             }
         }
         observers.append((NotificationCenter.default, powerToken))
+
+        let thermalToken = NotificationCenter.default.addObserver(
+            forName: ProcessInfo.thermalStateDidChangeNotification,
+            object: nil,
+            queue: .main
+        ) { _ in
+            MainActor.assumeIsolated {
+                let engine = SystemMonitorEngine.shared
+                guard engine.isActive else { return }
+                engine.updateRunningState()
+            }
+        }
+        observers.append((NotificationCenter.default, thermalToken))
     }
 
     private func unregisterObservers() {

@@ -62,10 +62,10 @@ struct PanelFooter: View {
                 StatusItemController.shared.closePanel(animated: true)
                 NativeAppLauncher.openSystemTool(for: module)
             }
-            PanelActionRow(title: localized("Open MonoHub"), symbol: "square.grid.2x2") {
+            PanelActionRow(title: localized("Open MonoHub"), symbol: "macwindow") {
                 StatusItemController.shared.openMainWindow()
             }
-            PanelActionRow(title: localized("MonoHub Settings…"), symbol: "menubar.rectangle") {
+            PanelActionRow(title: localized("MonoHub Settings…"), symbol: "gearshape") {
                 StatusItemController.shared.openSettings()
             }
         }

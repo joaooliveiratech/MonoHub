@@ -60,6 +60,8 @@ nonisolated final class ProcessReader {
     private var previousTimestamp: UInt64 = 0
     private var previousGPUTimestamp: UInt64 = 0
     private var identityCache: [pid_t: (name: String, bundlePath: String?)] = [:]
+    private var threadCountCache: [pid_t: Int] = [:]
+    private var accelerators: [io_service_t] = []
     private var ticksSinceCachePrune = 0
 
     func read(limit: Int, includeGPU: Bool) -> ProcessSnapshot {
@@ -245,6 +247,7 @@ nonisolated final class ProcessReader {
             identityCache = identityCache.filter { previousMetrics[$0.key] != nil }
         }
 
+        threadCountCache.removeAll(keepingCapacity: true)
         if rankings.contains(.cpu) {
             snapshot.topCPU = Self.top(samplesBuffer, limit: limit) { $0.cpuPercent > $1.cpuPercent }
                 .map { makeItem(from: $0) }
@@ -359,10 +362,15 @@ nonisolated final class ProcessReader {
     }
 
     private func readThreadCount(for pid: pid_t) -> Int {
+        // The same process often appears in several rankings; one syscall per tick is enough.
+        if let cached = threadCountCache[pid] {
+            return cached
+        }
         var info = proc_taskinfo()
         let size = Int32(MemoryLayout<proc_taskinfo>.size)
-        guard proc_pidinfo(pid, PROC_PIDTASKINFO, 0, &info, size) == size else { return 0 }
-        return Int(info.pti_threadnum)
+        let count = proc_pidinfo(pid, PROC_PIDTASKINFO, 0, &info, size) == size ? Int(info.pti_threadnum) : 0
+        threadCountCache[pid] = count
+        return count
     }
 
     private func identity(for pid: pid_t) -> (name: String, bundlePath: String?) {
@@ -405,8 +413,9 @@ nonisolated final class ProcessReader {
         currentGPUTime.removeAll(keepingCapacity: true)
         latestGPUPercent.removeAll(keepingCapacity: true)
 
-        let accelerators = IORegistry.services(matching: "IOAccelerator")
-        defer { IORegistry.release(accelerators) }
+        if accelerators.isEmpty {
+            accelerators = IORegistry.services(matching: "IOAccelerator")
+        }
 
         for accelerator in accelerators {
             var children = io_iterator_t()
@@ -468,6 +477,7 @@ nonisolated final class ProcessReader {
     }
 
     deinit {
+        IORegistry.release(accelerators)
         if hostPort != mach_port_t(MACH_PORT_NULL) {
             mach_port_deallocate(mach_task_self_, hostPort)
         }

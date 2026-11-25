@@ -21,10 +21,10 @@ nonisolated final class SensorsReader {
 
     private var client: IOHIDEventSystemClient?
     private var dieSensors: [IOHIDServiceClient] = []
+    private var quickDieSensors: [IOHIDServiceClient] = []
     private var ssdSensor: IOHIDServiceClient?
     private var batterySensor: IOHIDServiceClient?
     private var didDiscover = false
-    private var quickRotation = 0
     private var history = RollingHistory()
 
     func read(detailed: Bool) -> SensorsData {
@@ -34,7 +34,7 @@ nonisolated final class SensorsReader {
         data.thermalState = ProcessInfo.processInfo.thermalState
         data.uptimeSeconds = ProcessInfo.processInfo.systemUptime
 
-        let dies = detailed ? dieSensors : quickSubset()
+        let dies = detailed ? dieSensors : quickDieSensors
         let readings = dies.compactMap(temperature(of:))
         if !readings.isEmpty {
             data.socTemperature = readings.reduce(0, +) / Double(readings.count)
@@ -57,10 +57,13 @@ nonisolated final class SensorsReader {
         return batterySensor.flatMap(temperature(of:))
     }
 
-    private func quickSubset() -> [IOHIDServiceClient] {
-        guard dieSensors.count > Self.quickDieSampleCount else { return dieSensors }
-        quickRotation = (quickRotation + 1) % dieSensors.count
-        return (0..<Self.quickDieSampleCount).map { dieSensors[(quickRotation + $0 * 3) % dieSensors.count] }
+    /// A fixed, evenly spread subset of die sensors. Rotating the subset on every tick made the
+    /// average jump between readings even when the chip temperature was stable, which caused
+    /// needless menu bar redraws and a noisy history chart.
+    static func quickSubsetIndices(count: Int, sampleCount: Int) -> [Int] {
+        guard count > sampleCount, sampleCount > 0 else { return Array(0..<max(count, 0)) }
+        let step = Double(count) / Double(sampleCount)
+        return (0..<sampleCount).map { min(Int((Double($0) + 0.5) * step), count - 1) }
     }
 
     private func temperature(of service: IOHIDServiceClient) -> Double? {
@@ -95,5 +98,6 @@ nonisolated final class SensorsReader {
             }
         }
         dieSensors = dies.sorted { $0.0.localizedStandardCompare($1.0) == .orderedAscending }.map(\.1)
+        quickDieSensors = Self.quickSubsetIndices(count: dieSensors.count, sampleCount: Self.quickDieSampleCount).map { dieSensors[$0] }
     }
 }

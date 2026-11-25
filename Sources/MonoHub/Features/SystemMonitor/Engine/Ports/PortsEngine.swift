@@ -1,6 +1,5 @@
 import Darwin
 import Foundation
-import AppKit
 
 nonisolated final class PortsEngine: Sendable {
     static let shared = PortsEngine()
@@ -52,6 +51,8 @@ nonisolated final class PortsEngine: Sendable {
 
     static func parseLsofOutput(_ output: String) -> [NetworkPortItem] {
         var items: [NetworkPortItem] = []
+        var identityCache: [pid_t: (name: String, path: String?)] = [:]
+        var idCounts: [String: Int] = [:]
         let lines = output.components(separatedBy: .newlines)
 
         for line in lines {
@@ -97,16 +98,27 @@ nonisolated final class PortsEngine: Sendable {
 
             guard let port = portNumber, port > 0 else { continue }
 
-            let procPath = getProcessPath(pid: pid)
-            let friendlyName = getProcessName(pid: pid, fallback: rawCommand)
+            let identity: (name: String, path: String?)
+            if let cached = identityCache[pid] {
+                identity = cached
+            } else {
+                let path = getProcessPath(pid: pid)
+                let name = resolveProcessName(path: path, fallback: rawCommand)
+                identity = (name, path)
+                identityCache[pid] = identity
+            }
             let isWeb = isCommonWebPort(port)
 
-            let id = "\(pid)-\(proto)-\(port)-\(localAddress)-\(state)"
+            let baseID = "\(pid)-\(proto)-\(port)-\(localAddress)-\(remoteAddress ?? "")-\(state)"
+            let occurrence = idCounts[baseID, default: 0]
+            idCounts[baseID] = occurrence + 1
+            let id = occurrence == 0 ? baseID : "\(baseID)#\(occurrence)"
+
             let item = NetworkPortItem(
                 id: id,
                 pid: pid,
-                processName: friendlyName,
-                processPath: procPath,
+                processName: identity.name,
+                processPath: identity.path,
                 user: user,
                 port: port,
                 networkProtocol: proto,
@@ -152,22 +164,26 @@ nonisolated final class PortsEngine: Sendable {
         return nil
     }
 
-    private static func getProcessName(pid: pid_t, fallback: String) -> String {
-        if let app = NSRunningApplication(processIdentifier: pid), let name = app.localizedName, !name.isEmpty {
-            return name
-        }
-        if let path = getProcessPath(pid: pid) {
-            let lastComponent = (path as NSString).lastPathComponent
-            if !lastComponent.isEmpty {
-                return lastComponent
+    private static func resolveProcessName(path: String?, fallback: String) -> String {
+        guard let path, !path.isEmpty else { return fallback }
+        var name = (path as NSString).lastPathComponent
+        if let range = path.range(of: ".app/", options: .caseInsensitive),
+           name.isEmpty || name.caseInsensitiveCompare("Electron") == .orderedSame || name.caseInsensitiveCompare("MacOS") == .orderedSame {
+            let bundlePath = String(path[..<range.lowerBound]) + ".app"
+            let bundleName = ((bundlePath as NSString).lastPathComponent as NSString).deletingPathExtension
+            if !bundleName.isEmpty {
+                name = bundleName
             }
         }
-        return fallback
+        return name.isEmpty ? fallback : name
     }
 
+    private static let commonWebPorts: Set<Int> = [
+        80, 443, 3000, 3001, 4000, 4200, 5000, 5001, 5173, 5174, 8000, 8080, 8081, 8443, 8888, 9000, 9090
+    ]
+
     private static func isCommonWebPort(_ port: Int) -> Bool {
-        let commonWeb = Set([80, 443, 3000, 3001, 4000, 4200, 5000, 5001, 5173, 5174, 8000, 8080, 8081, 8443, 8888, 9000, 9090])
-        return commonWeb.contains(port) || (port >= 3000 && port <= 9999)
+        commonWebPorts.contains(port) || (3000...9999).contains(port)
     }
 
     func terminateProcess(pid: pid_t, force: Bool = false) async -> Bool {
@@ -177,7 +193,7 @@ nonisolated final class PortsEngine: Sendable {
             return false
         }
 
-        try? await Task.sleep(nanoseconds: 200_000_000)
+        try? await Task.sleep(for: .milliseconds(200))
         return kill(pid, 0) != 0
     }
 }

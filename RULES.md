@@ -1,90 +1,100 @@
-# MonoHub Rules
+# MonoHub Rules & Engineering Guidelines
 
-Regras obrigatórias para desenvolvimento, manutenção, privacidade e versionamento do **MonoHub**.
-
-## Identidade & Propósito do Projeto
-
-O **MonoHub** é a central unificada de utilitários nativos para **macOS 27 (Apple Silicon ARM64)**, combinando em um único aplicativo modular:
-1. **Monitoramento de Sistema & Barra de Menus (MonoStats)**: widgets nativos em tempo real na barra de menus com painéis em Liquid Glass (`NSGlassEffectView`), monitorando CPU (núcleos P/E), RAM, GPU, Armazenamento I/O, Rede, Bateria/Energia (Watts) e Sensores Térmicos HID.
-2. **Notch Dinâmico & Dynamic Island (MonoNotch)**: experiência de Dynamic Island nativa no entalhe do MacBook e em monitores externos (notch virtual), com atividades em tempo real (mídia, agenda com links de reuniões em um clique, checklist de lembretes, timer/cronômetro, espelho de câmera com Studio Light/Center Stage/Retrato, teleprompter e bloco de notas rápidas com auto-scroll no olhar da câmera, telemetria de bateria BLE/Bluetooth, gaveta de arquivos com AirDrop instantâneo e substituição compacta de HUDs de volume/brilho).
-3. **Alternador de Janelas & Alt+Tab Avançado (MonoTab)**: alternador nativo ultrarrápido acionado via `⌥ Tab` / `⌘ Tab` com miniaturas em tempo real aceleradas por hardware via `ScreenCaptureKit`, navegação por teclado (incluindo Vim `hjkl` e dígitos 1-9), busca fuzzy instantânea e Quick Look.
-4. **Organização & Encaixe Magnético de Janelas (MonoTile)**: gerenciamento de janelas com encaixe magnético nas bordas da tela, atalhos globais de alto desempenho e suporte multimonitor.
-5. **Desinstalação Profunda, Limpeza e Manutenção (MonoClean)**: desinstalador transparente de aplicativos, caçador de resíduos órfãos, limpeza profunda de caches/logs, purga de artefatos de projetos (`node_modules`, `.build`, `target`, `.venv`), análise de grandes arquivos e otimização do sistema.
-6. **Cotas de IA (MonoAiBar)**: ícone na barra de menus (anel de progresso + valor, ordem configurável) e painel em Liquid Glass com o uso e os limites de Claude, Codex, Antigravity e demais provedores de IA, sem consumir tokens. Cada provedor liga e desliga individualmente.
-7. **Capturas de Tela (MonoShot)**: captura de área, janela e tela inteira via `ScreenCaptureKit`, lupa de pixel, editor de anotações (seta, retângulo, numeração, texto, desfoque/pixelização), OCR local (Vision) e imagens fixadas na tela. Atalhos globais Carbon (assinatura própria, sem exigir Acessibilidade) e permissão de Gravação de Tela compartilhada com o Alternador de Janelas.
-8. **Conversão e Redução de Mídia (MonoConvert)**: conversão e compressão aceleradas por hardware para vídeos e imagens utilizando o Media Engine do Apple Silicon ARM64 (`AVFoundation`) e `ImageIO`. Inclui perfis dedicados para vídeos (Tablet 720p Fullscreen L3.1, Tablet 480p SD, Universal MP4 1080p, Web Compacto, HEVC Alta Eficiência e Extração de Áudio M4A) e imagens (HEIC, AVIF, WebP, JPEG, PNG, TIFF) com remoção opcional de metadados EXIF para máxima privacidade e redução de tamanho, processamento em lote via Drag & Drop e cálculo dinâmico de economia de espaço.
-9. **Ciclo de Vida Híbrido Inteligente (Dock + Barra de Menus)**: exibe o aplicativo normalmente no Dock enquanto a janela principal está aberta; ao fechar a janela principal, oculta o ícone do Dock (`.accessory`) e permanece rodando de forma ultraleve apenas na Barra de Menus e no Notch.
+Mandatory rules for developing, maintaining, testing, securing, and releasing **MonoHub**.
 
 ---
 
-## Invariantes Críticas de Privacidade, Segurança e Desempenho
+## 1. Project Identity & Integrated Modules
 
-1. **Zero Telemetria / Rede Restrita ao Módulo Cotas de IA**:
-   - O MonoHub é estritamente privado. Todos os módulos operam 100% offline, exceto Cotas de IA (`AIQuota/`).
-   - Somente o módulo Cotas de IA abre conexões de saída, exclusivamente para os endpoints de uso dos provedores que o usuário ativou. Com o módulo desativado, nenhuma conexão é feita. Conexões de entrada nunca são permitidas (`Entitlements.plist` declara `com.apple.security.network.client` e omite `com.apple.security.network.server`).
-   - Chaves e tokens de provedores vivem apenas no Keychain do macOS; nunca em `UserDefaults` nem em arquivos. Nunca enviar prompts nem consumir tokens, nunca renovar sessões OAuth de outras ferramentas.
-   - Subprocessos permitidos no módulo Cotas de IA: apenas via `CommandRunner` (`agy -p /usage`) e a sincronização do Keychain do Claude Code.
-   - Nenhuma biblioteca de analytics, crash report remoto ou rastreamento pode ser incluída.
-   - Todo o histórico de operações de limpeza é estritamente local em `~/Library/Logs/MonoHub/operations.log`.
+**MonoHub** is a unified, native macOS utility suite built in **Swift 6.4** exclusively for **macOS 27+ (Apple Silicon ARM64)** with a **macOS 27 Liquid Glass** (`NSGlassEffectView`) design language and **Zero Telemetry**.
 
-2. **Segurança e Transparência Absoluta na Remoção de Arquivos**:
-   - Nenhuma remoção ocorre de forma silenciosa ou opaca.
-   - Todo arquivo ou diretório a ser removido é explicitamente listado com caminho completo, tamanho calculado e checkbox individual.
-   - Ações destrutivas exigem confirmação explícita via modal.
-   - Suporte prioritário para mover para a Lixeira do macOS (`trashItem`).
-   - Lista de exclusão segura (Whitelist) em `~/.config/monohub/whitelist`.
+It consolidates the following on-demand modules into a single modular application:
 
-3. **Ultra-baixo Consumo de CPU & Bateria (Monitoramento Kernel Mach/Darwin)**:
-   - Zero subprocessos para telemetria: todas as métricas vêm diretamente do kernel Mach/Darwin e IOKit (`host_statistics64`, `host_processor_info`, `vm_statistics64`, `statvfs`, `getifaddrs`, `IOKit`, `libproc`).
-   - Coleta em fila `.utility` nos núcleos de eficiência (E-Cores) com pausa automática quando a tela dorme ou a sessão é bloqueada.
-   - Varredura de processos (`proc_listpids`) sob demanda apenas quando um painel detalhado ou a aba Monitor do Sistema está visível.
+1. **System Monitor & Menu Bar (`SystemMonitor/`)**: Real-time kernel-level telemetry widgets in the menu bar and dashboard (CPU P/E cores, RAM, GPU, Disk I/O, Network, Battery & Power in Watts, HID Thermal Sensors, per-process Network Bandwidth & Ports, and Battery Health diagnostics).
+2. **Dynamic Notch & Dynamic Island (`DynamicNotch/`)**: Native Dynamic Island experience on physical MacBook notches and virtual floating notches on external displays — media Live Activities with equalizer, AI Quota & heavy-process wings/peek alerts, EventKit Calendar & Reminders with 1-click meeting joins, low-latency Camera Mirror with Studio Controls, Teleprompter & Scratchpad, Bluetooth battery telemetry, File Shelf with AirDrop, Clipboard Manager, and compact HUD replacements.
+3. **Window Switcher (`WindowSwitcher/`)**: High-speed `⌥ Tab` / `⌘ Tab` window switcher with hardware-accelerated `ScreenCaptureKit` thumbnails in ephemeral RAM cache, Vim (`hjkl`) & numeric (`1–9`) navigation, fuzzy search (`f` / `/`), Quick Look (`Space`), and direct window actions.
+4. **Window Tiling & Management (`WindowTiling/`)**: Magnetic edge-drag snapping with Liquid Glass previews, smart MRU focus queue (`⌃⌥⌘⇥`, `⌃⌥⌘]`, `⌃⌥⌘[`, `⌃⌥⌘↩`), directional focus, 30+ global shortcuts, modifier drag/resize, multi-monitor support, CLI (`monohub` / `monotile`), and URL schemes.
+5. **Cleanup, Uninstaller & Maintenance (`Cleanup/`)**: Transparent app uninstaller, orphan residue hunter, deep system cache cleaner, Time Machine APFS local snapshot purger, dev project artifact purger (`node_modules`, `.build`, `target`, `.venv`), Dev Environments inspector (Xcode, Node, Python/ML, Homebrew, Rust, Go, Docker), Duplicate Files & Similar Photos (`CryptoKit` + `Vision`), Startup Items & LaunchAgents manager, Disk Analyzer, and System Optimization.
+6. **AI Quotas (`AIQuota/`)**: Menu bar progress ring/badge and Liquid Glass cards tracking usage, pacing, credits, and rate-limit resets for Claude, Codex, Antigravity, Copilot, Cursor, DeepSeek, Kimi, GLM, and more — without sending prompts or consuming tokens.
+7. **Screenshots, Scrolling Capture & Screen Recording (`Screenshot/`)**: Region, window, and fullscreen capture via `ScreenCaptureKit`, pixel magnifier + HEX picker, annotation editor (arrows, rectangles, numbering, text, destructive blur/pixelate), local Vision OCR, hardware-stitched Scrolling Capture (up to 32,000 px), quick GIF / MP4 / WebM screen recording, and floating pinned images.
+8. **Media Converter (`MediaConverter/`)**: Apple Silicon Media Engine (`AVFoundation` / VideoToolbox) and `ImageIO` hardware-accelerated batch video transcoding and image optimization (HEIC, AVIF, WebP, JPEG, PNG, TIFF) with optional EXIF stripping.
+9. **Display Control (`DisplayControl/`)**: Opt-in (disabled by default) native display control suite with DDC/CI hardware backlight/volume/input control, sub-zero dimming & blackout, XDR/HDR extra brightness upscaling, HiDPI scaling & rotation, Kelvin color calibration, virtual displays (`CGVirtualDisplay`), hardware PiP / teleprompter stream, layout protection, and EDID inspector/override export.
+10. **Audio Control (`AudioControl/`)**: Native CoreAudio output/input device management, per-app volume control, and quick audio routing.
+11. **Productivity & Clipboard (`Productivity/`)**: URL Router & UTM tracker stripper (native routing for Zoom, Teams, Figma, Notion, Telegram, plus source-app/domain rules), system-wide Text Expansion / Snippets with dynamic variables (`{date}`, `{time}`, `{clipboard}`, `{uuid}`), and 1-tap Bluetooth Quick Connect (`⌥ B`) with automatic CoreAudio routing.
+12. **Smart Hybrid Lifecycle**: Appears in the Dock while the main window is open; closing the main window (`⌘W`) transitions to `.accessory` mode and continues running silently in the Menu Bar and Notch.
 
 ---
 
-## Versionamento Semântico (SemVer) e Procedimento de Release
+## 2. Critical Privacy, Security & Performance Invariants
 
-O projeto segue rigorosamente o Versionamento Semântico (`MAJOR.MINOR.PATCH`):
-- **Versão Inicial Base**: `0.1.0` (Tag: `v0.1.0`).
-- **PATCH (`0.1.x`)**: Correções de bugs, ajustes de interface e melhorias de performance.
-- **MINOR (`0.x.0`)**: Novos módulos ou novas ferramentas adicionadas ao MonoHub.
-- **MAJOR (`x.0.0`)**: Mudanças estruturais profundas ou reformulação de arquitetura.
+### Privacy & Network Isolation
+- **Zero Telemetry**: No analytics SDKs, remote crash reporters, tracking beacons, or usage telemetry of any kind.
+- **Network Restricted to AI Quotas**: Every module operates 100% offline except `AIQuota/`.
+  - `Resources/Entitlements.plist` declares `com.apple.security.network.client` solely for enabled AI quota providers and intentionally omits `com.apple.security.network.server`.
+  - When AI Quotas is disabled in **Modules**, zero outbound network connections are made.
+- **Keychain-Only Credentials**: Provider API keys and tokens live exclusively in the macOS Keychain — never in `UserDefaults`, plists, or plain-text files. Never send prompts, consume tokens, or refresh OAuth sessions owned by other tools.
+- **Permitted Subprocesses in AI Quotas**: Only via `CommandRunner` (`agy -p /usage`) and Claude Code Keychain synchronization.
+- **Local-Only Audit Log**: Cleanup history is stored strictly locally at `~/Library/Logs/MonoHub/operations.log`.
 
-### Procedimento Obrigatório de Incremento a Cada Nova Versão
-Sempre que uma nova tarefa, correção ou funcionalidade for concluída:
-1. Atualizar `AppInfo.version` e `AppInfo.build` em `Sources/MonoHub/App/AppInfo.swift`.
-2. Atualizar `CFBundleShortVersionString` e incrementar `CFBundleVersion` em `Resources/Info.plist`.
-3. Atualizar o badge de versão no topo do `README.md`.
-4. Executar `make test` garantindo 0 falhas.
-5. Executar `make build` e `make install` para validar o empacotamento e reiniciar a versão instalada em `/Applications/MonoHub.app`.
-6. Criar commit com Conventional Commits (`feat:`, `fix:`, `chore:`) e tag semver anotada (`vX.Y.Z`).
+### Safe & Transparent Destructive Actions
+- **No Silent Deletion**: Every file, directory, snapshot, duplicate, or LaunchAgent scheduled for removal must be explicitly listed with its full path, computed size, and individual checkbox.
+- **Mandatory Confirmation Modals**: All destructive operations (deletions, process termination, system purges) require explicit modal confirmation.
+- **Trash First**: Prefer moving items to the macOS Trash (`trashItem`) whenever applicable.
+- **Whitelist Protection**: Respect user-protected paths in `~/.config/monohub/whitelist` and strictly protect Apple system services (`com.apple.*`).
 
----
-
-## Regras de Instalação e Higiene de Cache
-
-- **Local Único de Instalação**: Instalar sempre exclusivamente em `/Applications/MonoHub.app`. Nunca duplicar em `~/Applications/` ou deixar o bundle `.app` na raiz do repositório.
-- **Procedimento Obrigatório de Instalação Limpa (`make install`)**:
-  1. Encerrar instâncias anteriores em execução (`killall MonoHub MonoClean MonoStats`).
-  2. Remover versões antigas e duplicatas tanto em `/Applications/` quanto em `~/Applications/` (incluindo os antigos `MonoClean.app` e `MonoStats.app`).
-  3. Limpar caches da aplicação (`~/Library/Caches/com.antigravity.monohub`).
-  4. Desregistrar caminhos obsoletos no LaunchServices (`lsregister -u`).
-  5. Remover o bundle `.app` da pasta do repositório após a cópia para `/Applications/`.
-  6. Recadastrar `/Applications/MonoHub.app` no LaunchServices (`lsregister -f`) e atualizar caches do sistema (`qlmanage -r`, `killall Finder`).
+### Battery, CPU & Concurrency Efficiency
+- **On-Demand Zero-Cost Modules**: Disabling a module (or an individual Dynamic Notch feature) must tear down its underlying engine, timers, event taps, and observers — not merely hide its UI.
+- **Lock-Screen & Display-Sleep Suspension**: All background engines, timers, and animations must suspend when the Mac is locked or the display sleeps.
+- **Kernel-Direct Telemetry**: Zero subprocesses for system monitoring. All metrics come directly from Mach/Darwin and IOKit (`host_statistics64`, `host_processor_info`, `vm_statistics64`, `statvfs`, `getifaddrs`, `IOKit`, `libproc`, Darwin `NetworkStatistics`).
+- **E-Core Scheduling**: Run background sampling on `.utility` queues targeting Apple Silicon Efficiency Cores; scan process lists (`proc_listpids`) on demand only when a detail panel or System Monitor view is visible.
+- **Swift 6.4 Strict Concurrency**: Conform to Swift 6 strict concurrency (`MainActor` default isolation, `Sendable`, `async/await`, `actor`). Never block the main thread with synchronous disk I/O, media transcoding, or cryptographic hashing.
 
 ---
 
-## Proibição de Assets de Release (CRÍTICA)
+## 3. Screenshot Module Rules (`Screenshot/`)
 
-- **NUNCA** fazer upload de arquivos binários compilados, pacotes `.app`, arquivos `.zip` ou qualquer artefato de build como assets de release no GitHub.
-- Releases devem consistir estritamente apenas de tags Git, commits e notas de lançamento em Markdown.
+- **Instant `ESC`**: `ESC` immediately dismisses the capture overlay, editor, and pinned images on the first press (except while typing inline text, where it cancels the text input).
+- **Silent Startup**: Never open windows on launch; register only global hotkeys and the menu bar icon.
+- **Strict Offline & Privacy**: Zero network calls, no disk writes without explicit user action, strip EXIF/GPS metadata on export, mark OCR clipboard output as sensitive/concealed, and never log captured screen content or OCR text.
+- **Carbon Hotkeys**: Every `kEventHotKeyPressed` handler must verify the `EventHotKeyID` signature and return `eventNotHandledErr` for events belonging to other modules (e.g., `WindowTiling`).
+- **Editor Window Policy**: Keep the app in `.regular` activation policy while any screenshot editor is open (`MainWindowController.updateActivationPolicy()` checks `ScreenshotController.hasOpenEditors`).
+- **Preferences**: Use `MonoHub_Screenshot_*` keys; standalone MonoShot preferences (`com.antigravity.monoshot`) are migrated once on first run.
 
 ---
 
-## Regras do Módulo Capturas de Tela (`Screenshot/`)
+## 4. Semantic Versioning (SemVer) & Release Procedure
 
-- **ESC instantâneo**: ESC fecha overlay, editor e imagens fixadas no primeiro toque (exceto durante a digitação de texto inline, onde cancela o campo).
-- **Inicialização silenciosa**: o módulo nunca abre janelas ao iniciar; só atalhos globais e ícone na barra de menus.
-- **Sem rede**: o módulo não faz nenhuma chamada de rede, não grava captura em disco sem ação explícita e não escreve metadados nas exportações.
-- **Hotkeys Carbon**: todo handler `kEventHotKeyPressed` deve checar a assinatura do `EventHotKeyID` e devolver `eventNotHandledErr` para eventos de outros módulos (Organização de Janelas usa o mesmo alvo de eventos).
-- **Janelas de edição**: enquanto houver um editor aberto o app permanece `.regular`; `MainWindowController.updateActivationPolicy()` considera `ScreenshotController.hasOpenEditors`.
-- **Preferências**: chaves `MonoHub_Screenshot_*`; os valores do MonoShot standalone (`com.antigravity.monoshot`) são importados uma única vez.
+MonoHub strictly follows **Semantic Versioning (`MAJOR.MINOR.PATCH`)**:
+- **PATCH (`0.x.Y`)**: Bug fixes, UI polish, battery/performance optimizations.
+- **MINOR (`0.X.0`)**: New modules or major user-facing features.
+- **MAJOR (`X.0.0`)**: Breaking architectural overhauls.
+
+### Mandatory Version Bump Checklist
+Whenever a release is prepared:
+1. Update `AppInfo.version` and increment `AppInfo.build` in `Sources/MonoHub/App/AppInfo.swift`.
+2. Update `CFBundleShortVersionString` and `CFBundleVersion` in `Resources/Info.plist`.
+3. Update the version badge in `README.md`.
+4. Run `make test` and verify **0 failures**.
+5. Run `make install` to verify release compilation, code signing, bundle packaging, and clean installation to `/Applications/MonoHub.app`.
+6. Commit with Conventional Commits (`feat:`, `fix:`, `perf:`, `docs:`, `chore:`) and create an annotated SemVer Git tag (`git tag -a vX.Y.Z -m "MonoHub vX.Y.Z"`).
+
+---
+
+## 5. Clean Installation & Cache Hygiene Invariant
+
+- **Single Install Location**: Always install exclusively to `/Applications/MonoHub.app`. Never leave duplicate bundles in `~/Applications/` or in the repository root.
+- **Mandatory Clean Install (`make install`)**:
+  1. Terminate running instances (`MonoHub` and legacy standalone Mono apps).
+  2. Remove previous/duplicate bundles from `/Applications/` and `~/Applications/`.
+  3. Clear application caches (`~/Library/Caches/com.antigravity.monohub`).
+  4. Unregister obsolete LaunchServices paths (`lsregister -u`).
+  5. Copy `MonoHub.app` to `/Applications/` and delete the local `.app` bundle from the repository root.
+  6. Symlink CLI tools (`monohub`, `monotile`, `monotab`, `mononotch`, `monoaibar`, `monoshot`) into `~/.local/bin`.
+  7. Re-register `/Applications/MonoHub.app` in LaunchServices (`lsregister -f`) and flush system caches (`qlmanage -r`, `killall Finder`).
+
+---
+
+## 6. Release Asset Prohibition (CRITICAL)
+
+- **NEVER** upload compiled binaries, `.app` bundles, `.zip` archives, `.dmg` images, or any build artifacts as GitHub Release assets.
+- Releases must consist **strictly of Git tags, commits, and Markdown release notes** (source-only releases).

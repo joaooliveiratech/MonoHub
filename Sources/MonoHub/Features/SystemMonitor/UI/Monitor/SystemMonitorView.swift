@@ -94,7 +94,7 @@ private struct HardwareSummaryCard: View {
 
     var body: some View {
         HStack(alignment: .center, spacing: 12) {
-            HubIcon(systemName: "desktopcomputer", tint: .gray, size: 36)
+            HubIcon(systemName: machineSymbol, tint: .gray, size: 36)
             VStack(alignment: .leading, spacing: 2) {
                 Text(hardware.chipName)
                     .font(.headline)
@@ -107,6 +107,17 @@ private struct HardwareSummaryCard: View {
             ThermalBadge()
         }
         .hubCard()
+    }
+
+    private var machineSymbol: String {
+        let model = hardware.modelIdentifier.lowercased()
+        if model.contains("macbook") || SystemMonitorEngine.shared.batteryData.hasBattery {
+            return "laptopcomputer"
+        }
+        if model.contains("macmini") {
+            return "macmini"
+        }
+        return "desktopcomputer"
     }
 
     private var summary: String {
@@ -163,31 +174,109 @@ private struct ModuleOverviewCard: View {
                     .accessibilityHidden(true)
             }
             chart
-                .frame(height: 46)
+                .frame(height: 48)
 
-            if let top = topConsumer {
-                HStack(spacing: 6) {
-                    Image(nsImage: AppIconCache.shared.icon(for: top.item.bundlePath))
-                        .resizable()
-                        .interpolation(.high)
-                        .frame(width: 14, height: 14)
-                    Text(top.item.name)
-                        .font(.caption2.weight(.medium))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                    Spacer(minLength: 4)
-                    Text(top.value)
-                        .font(.caption2.weight(.semibold))
-                        .monospacedDigit()
-                        .foregroundStyle(.secondary)
-                }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
-            }
+            footerPill
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .hubCard(isInteractive: true)
         .accessibilityElement(children: .combine)
+    }
+
+    private var footerPill: some View {
+        HStack(spacing: 6) {
+            if let top = topConsumer {
+                Image(nsImage: AppIconCache.shared.icon(for: top.item.bundlePath))
+                    .resizable()
+                    .interpolation(.high)
+                    .frame(width: 14, height: 14)
+                Text(top.item.name)
+                    .font(.caption2.weight(.medium))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Spacer(minLength: 4)
+                Text(top.value)
+                    .font(.caption2.weight(.semibold))
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            } else {
+                let meta = footerMeta
+                Image(systemName: meta.symbol)
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(.tertiary)
+                    .frame(width: 14, height: 14)
+                Text(meta.label)
+                    .font(.caption2.weight(.medium))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                Spacer(minLength: 4)
+                Text(meta.value)
+                    .font(.caption2.weight(.semibold))
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+        }
+        .padding(.horizontal, 8)
+        .frame(maxWidth: .infinity)
+        .frame(height: 24)
+        .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+    }
+
+    private var footerMeta: (symbol: String, label: String, value: String) {
+        switch module {
+        case .cpu:
+            let load = engine.cpuData.loadAverage
+            return (
+                "gauge.with.dots.needle.33percent",
+                localized("Load"),
+                "\(Formatting.decimal(load.one, digits: 2)) · \(Formatting.decimal(load.five, digits: 2))"
+            )
+        case .ram:
+            let ram = engine.ramData
+            return (
+                "arrow.left.arrow.right",
+                "Swap",
+                ram.swapUsedBytes > 0 ? Formatting.bytes(ram.swapUsedBytes) : localized("None")
+            )
+        case .gpu:
+            let gpu = engine.gpuData
+            return (
+                "memorychip",
+                localized("Allocated"),
+                Formatting.bytes(gpu.allocatedMemoryBytes)
+            )
+        case .disk:
+            let disk = engine.diskData
+            return (
+                "arrow.up.arrow.down",
+                localized("I/O"),
+                "R \(Formatting.speed(disk.readBytesPerSec)) · W \(Formatting.speed(disk.writeBytesPerSec))"
+            )
+        case .network:
+            let net = engine.networkData
+            let ip = net.localIPv4 ?? localized("Offline")
+            return (
+                "network",
+                net.interfaceName ?? localized("Interface"),
+                ip
+            )
+        case .battery:
+            let battery = engine.batteryData
+            if let health = battery.healthPercent {
+                return ("heart.fill", localized("Maximum Capacity"), "\(health)%")
+            }
+            return ("powerplug.portrait", localized("Power Source"), battery.powerSourceDescription)
+        case .sensors:
+            let sensors = engine.sensorsData
+            return (
+                "clock",
+                localized("Uptime"),
+                sensors.formattedUptime
+            )
+        }
     }
 
     private var topConsumer: (item: ProcessItem, value: String)? {
@@ -239,7 +328,7 @@ private struct ModuleOverviewCard: View {
             let disk = engine.diskData
             return (
                 Formatting.percent(disk.usedPercent),
-                String(format: localized("%@ free · R %@ · W %@"), Formatting.storage(disk.freeBytes), Formatting.speed(disk.readBytesPerSec), Formatting.speed(disk.writeBytesPerSec)),
+                String(format: localized("%@ free of %@"), Formatting.storage(disk.freeBytes), Formatting.storage(disk.totalBytes)),
                 UsageColor.forRatio(disk.usedPercent, base: .primary)
             )
         case .network:
@@ -299,13 +388,15 @@ private struct ModuleOverviewCard: View {
                     Text(battery.stateDetail)
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                        .lineLimit(2)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
                 }
-                .frame(maxHeight: .infinity, alignment: .center)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
             } else {
                 Label(localized("This Mac uses continuous external power"), systemImage: "powerplug.portrait")
                     .font(.callout)
                     .foregroundStyle(.secondary)
+                    .lineLimit(2)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
             }
         case .sensors:

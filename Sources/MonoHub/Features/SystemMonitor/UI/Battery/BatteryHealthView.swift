@@ -42,7 +42,7 @@ struct BatteryHealthView: View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .top, spacing: 16) {
                 HubIcon(
-                    systemName: battery.hasBattery ? "battery.100percent.bolt" : "powerplug.fill",
+                    systemName: battery.hasBattery ? "battery.100percent.bolt" : "powerplug.portrait.fill",
                     tint: battery.healthPercent ?? 100 >= 80 ? .green : .orange,
                     size: 40
                 )
@@ -76,6 +76,8 @@ struct BatteryHealthView: View {
                         HStack(spacing: 6) {
                             Text("\(battery.levelPercent)%")
                                 .font(.system(size: 28, weight: .bold, design: .rounded))
+                                .monospacedDigit()
+                                .contentTransition(.numericText())
                                 .foregroundStyle(battery.level <= 0.2 && !battery.isConnectedToPower ? .red : .primary)
                             BatteryGlyph(
                                 level: battery.level,
@@ -127,7 +129,7 @@ struct BatteryHealthView: View {
             metricTile(
                 title: localized("Temperature"),
                 value: temp.map { Formatting.temperature($0) } ?? "—",
-                detail: temp != nil ? (temp! > 40 ? localized("Elevated") : localized("Normal range")) : "—",
+                detail: temp.map { $0 > 40 ? localized("Elevated") : localized("Normal range") } ?? "—",
                 icon: "thermometer.medium",
                 tint: UsageColor.forBatteryTemperature(temp)
             )
@@ -169,11 +171,14 @@ struct BatteryHealthView: View {
             }
             Text(value)
                 .font(.system(size: 22, weight: .bold, design: .rounded))
+                .monospacedDigit()
+                .contentTransition(.numericText())
             Text(detail)
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .hubCard()
     }
 

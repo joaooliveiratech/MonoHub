@@ -108,7 +108,7 @@ struct MenuBarConfigView: View {
 
     private var livePreviewCard: some View {
         HStack {
-            Text(localized("Preview"))
+            Label(localized("Preview"), systemImage: "menubar.rectangle")
                 .font(.system(size: 12.5, weight: .medium))
                 .foregroundStyle(.secondary)
             Spacer()
@@ -117,17 +117,13 @@ struct MenuBarConfigView: View {
                     MenuBarPreview(module: module, style: prefs.displayStyle(for: module))
                 }
             }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .glassEffect(.regular, in: Capsule())
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color(nsColor: .controlBackgroundColor))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
-                )
-        )
+        .hubCard(padding: 0)
     }
 
     private var generalSection: some View {

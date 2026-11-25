@@ -218,48 +218,77 @@ nonisolated final class ProcessBandwidthEngine: Sendable {
 
     func sample() async -> BandwidthSnapshot {
         setupManagerIfNeeded()
-        return await Task.detached(priority: .userInitiated) { [self] in
-            self.performSample()
-        }.value
-    }
-
-    func stop() {
-        state.withLock { s in
-            if let mgr = s.manager, let destroy = nstatDestroy {
-                destroy(mgr)
-                s.manager = nil
+        return await withCheckedContinuation { continuation in
+            queue.async { [self] in
+                performSampleAsync { snapshot in
+                    continuation.resume(returning: snapshot)
+                }
             }
-            s.sources.removeAll()
-            s.previousPIDTotals.removeAll()
-            s.latestSnapshot = .empty
-            s.isInitialized = false
         }
     }
 
-    private func performSample() -> BandwidthSnapshot {
+    func stop() {
+        queue.async { [self] in
+            state.withLock { s in
+                if let mgr = s.manager, let destroy = nstatDestroy {
+                    destroy(mgr)
+                    s.manager = nil
+                }
+                s.sources.removeAll()
+                s.previousPIDTotals.removeAll()
+                s.lastSampleTime = 0
+                s.latestSnapshot = .empty
+                s.isInitialized = false
+            }
+        }
+    }
+
+    private func performSampleAsync(completion: @escaping @Sendable (BandwidthSnapshot) -> Void) {
         let mgr: NStatManagerRef? = state.withLock { $0.manager }
         guard let mgr,
               let queryDescriptions = nstatQueryAllDescriptions,
               let queryCounts = nstatQueryAllSources else {
-            return state.withLock { $0.latestSnapshot }
+            completion(state.withLock { $0.latestSnapshot })
+            return
         }
 
-        let semaDesc = DispatchSemaphore(value: 0)
-        queryDescriptions(mgr) {
-            semaDesc.signal()
+        // All NetworkStatistics callbacks execute on `queue`, so chaining them asynchronously
+        // avoids blocking Swift Concurrency's cooperative thread pool and eliminates data races
+        // on SourceItem fields.
+        runQueryWithTimeout(on: mgr, query: queryDescriptions) { [self] in
+            guard let activeManager = state.withLock({ $0.manager }) else {
+                completion(state.withLock { $0.latestSnapshot })
+                return
+            }
+            runQueryWithTimeout(on: activeManager, query: queryCounts) { [self] in
+                completion(finalizeSnapshot())
+            }
         }
-        _ = semaDesc.wait(timeout: .now() + .milliseconds(400))
+    }
 
-        let semaCounts = DispatchSemaphore(value: 0)
-        queryCounts(mgr) {
-            semaCounts.signal()
+    private func runQueryWithTimeout(
+        on manager: NStatManagerRef,
+        query: NStatManagerQueryFunc,
+        timeout: DispatchTimeInterval = .milliseconds(400),
+        completion: @escaping @Sendable () -> Void
+    ) {
+        let completed = Atomic<Bool>(false)
+        let finish: @Sendable () -> Void = {
+            guard !completed.exchange(true, ordering: .acquiringAndReleasing) else { return }
+            completion()
         }
-        _ = semaCounts.wait(timeout: .now() + .milliseconds(400))
+        queue.asyncAfter(deadline: .now() + timeout, execute: finish)
+        query(manager) {
+            finish()
+        }
+    }
 
+    private func finalizeSnapshot() -> BandwidthSnapshot {
         let now = DispatchTime.now().uptimeNanoseconds
 
         return state.withLock { s -> BandwidthSnapshot in
             var currentTotals: [pid_t: (name: String, rx: UInt64, tx: UInt64, sockets: Int)] = [:]
+            currentTotals.reserveCapacity(s.sources.count)
             for (_, item) in s.sources where item.pid > 0 {
                 var entry = currentTotals[item.pid] ?? (name: item.name, rx: 0, tx: 0, sockets: 0)
                 entry.rx &+= item.rxBytes
@@ -281,6 +310,7 @@ nonisolated final class ProcessBandwidthEngine: Sendable {
             )
 
             var newPrevious: [pid_t: (rx: UInt64, tx: UInt64)] = [:]
+            newPrevious.reserveCapacity(currentTotals.count)
             for (pid, entry) in currentTotals {
                 newPrevious[pid] = (rx: entry.rx, tx: entry.tx)
             }

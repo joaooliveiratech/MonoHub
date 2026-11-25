@@ -81,7 +81,7 @@ final class MenuBarPanel: NSPanel {
 
     func dismiss(completion: @escaping @MainActor () -> Void) {
         NSAnimationContext.runAnimationGroup { context in
-            context.duration = 0.1
+            context.duration = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? 0 : 0.1
             context.timingFunction = CAMediaTimingFunction(name: .easeIn)
             animator().alphaValue = 0
         } completionHandler: { [weak self] in

@@ -79,10 +79,29 @@ nonisolated final class Sampler: @unchecked Sendable {
         }
     }
 
-    static func leeway(for interval: TimeInterval) -> DispatchTimeInterval {
-        let factor = ProcessInfo.processInfo.isLowPowerModeEnabled ? 0.25 : 0.15
-        let floor = ProcessInfo.processInfo.isLowPowerModeEnabled ? 0.35 : 0.25
+    static let maximumAdaptiveInterval: TimeInterval = 20
+
+    /// Generous leeway lets the kernel coalesce our wakeups with other timers,
+    /// which matters more for battery than the exact sampling instant.
+    static func leeway(for interval: TimeInterval, lowPower: Bool = ProcessInfo.processInfo.isLowPowerModeEnabled) -> DispatchTimeInterval {
+        let factor = lowPower ? 0.35 : 0.2
+        let floor = lowPower ? 0.5 : 0.3
         return .milliseconds(Int(max(interval * factor, floor) * 1_000))
+    }
+
+    /// Stretches the cadence when nobody is actively looking at detailed data and the
+    /// system asks to save energy (Low Power Mode) or is under thermal pressure.
+    static func effectiveInterval(
+        base: TimeInterval,
+        lowPower: Bool,
+        thermalState: ProcessInfo.ThermalState,
+        isInteractive: Bool
+    ) -> TimeInterval {
+        guard !isInteractive else { return base }
+        var multiplier = 1.0
+        if lowPower { multiplier *= 2 }
+        if thermalState == .serious || thermalState == .critical { multiplier *= 1.5 }
+        return min(base * multiplier, max(base, maximumAdaptiveInterval))
     }
 
     func update(_ newRequest: SampleRequest) {

@@ -58,17 +58,28 @@ final class BatteryHealthEngine {
         }
         lastChargingState = battery.isCharging
 
-        let sample = BatterySample(
-            timestamp: Date(),
-            levelPercent: battery.levelPercent,
-            watts: battery.batteryPowerWatts,
-            temperatureCelsius: battery.temperatureCelsius,
-            isCharging: battery.isCharging
-        )
+        let now = Date()
+        let shouldAppendHistory: Bool
+        if let last = history.last {
+            let stateChanged = last.levelPercent != battery.levelPercent || last.isCharging != battery.isCharging
+            shouldAppendHistory = stateChanged || now.timeIntervalSince(last.timestamp) >= 10
+        } else {
+            shouldAppendHistory = true
+        }
 
-        history.append(sample)
-        if history.count > maxHistorySamples {
-            history.removeFirst(history.count - maxHistorySamples)
+        if shouldAppendHistory {
+            let sample = BatterySample(
+                timestamp: now,
+                levelPercent: battery.levelPercent,
+                watts: battery.batteryPowerWatts,
+                temperatureCelsius: battery.temperatureCelsius,
+                isCharging: battery.isCharging
+            )
+
+            history.append(sample)
+            if history.count > maxHistorySamples {
+                history.removeFirst(history.count - maxHistorySamples)
+            }
         }
 
         evaluateAlerts(for: battery)
